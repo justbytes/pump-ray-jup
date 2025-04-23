@@ -1,0 +1,28 @@
+{
+  "name": "coding",
+  "version": "1.0.0",
+  "description": "An easy way to buy, sell, and get pump.fun data",
+  "main": "index.js",
+  "author": "",
+  "license": "MIT",
+  "homepage": "https://github.com/justbytes/pump_fun_oracle#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justbytes/pump_fun_oracle.git"
+  },
+  "bugs": {
+    "url": "https://github.com/justbytes/pump_fun_oracle/issues"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0",
+    "esrun": "^3.2.26",
+    "gill": "^0.8.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.14.1"
+  }
+}
