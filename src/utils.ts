@@ -1,7 +1,4 @@
-export const formatPumpfunBuyAmount = (
-  amountInTokens: number,
-  maxSolToSpend: number
-) => {
+export const formatPumpfunBuyAmount = (amountInTokens: number, maxSolToSpend: number) => {
   // If maxSolToSpend is zero set maxSolToSpend slippage to 100%
   // "Buy the amountInTokens no matter the price"
   if (maxSolToSpend === 0) {
@@ -16,13 +13,16 @@ export const formatPumpfunBuyAmount = (
     maxSolToSpend = maxSolToSpend * 1e9;
   }
 
+  console.log('amount in tokens: ', amountInTokens);
+  console.log('max sol: ', maxSolToSpend);
+
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
-  dataBuffer.write("66063d1201daebea", "hex");
-  dataBuffer.writeBigUInt64LE(BigInt(amountInTokens), 8);
-  dataBuffer.writeBigUInt64LE(BigInt(maxSolToSpend), 16);
+
+  // Write the amounts to the buffer ontop of the anchor discriminator
+  dataBuffer.write('66063d1201daebea', 'hex');
+  dataBuffer.writeBigUInt64LE(BigInt(100), 8);
+  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
 
   return new Uint8Array(dataBuffer);
 };
-
-formatPumpfunBuyAmount(0, 0);
