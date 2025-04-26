@@ -2,20 +2,22 @@ import {
   AccountRole,
   address,
   createTransaction,
+  getAddressEncoder,
   getExplorerLink,
   getProgramDerivedAddress,
   getSignatureFromTransaction,
   IInstruction,
   KeyPairSigner,
   signTransactionMessageWithSigners,
-} from "gill";
-import { SYSTEM_PROGRAM_ADDRESS } from "gill/programs";
+} from 'gill';
+import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
   findAssociatedTokenPda,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
+  getCreateAssociatedTokenInstruction,
   TOKEN_PROGRAM_ADDRESS,
-} from "gill/programs/token";
+} from 'gill/programs/token';
 
 // Local Imports
 import {
@@ -24,8 +26,10 @@ import {
   PUMPFUN_GLOBAL,
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
-} from "./constants";
-import { formatPumpfunBuyAmount } from "./utils";
+} from './constants';
+import { formatPumpfunBuyAmount } from './utils';
+
+const ADDRESS_ENCODER = getAddressEncoder();
 
 /**
  *
@@ -48,31 +52,26 @@ export const pumpfunBuy = async (
   if (maxSolToSpend === 0 && amountInTokens === 0) {
     return {
       success: false,
-      data: "Both maxSolToSpend and amountInTokens cannot be zero",
+      data: 'Both maxSolToSpend and amountInTokens cannot be zero',
     };
   }
 
   // Get the Uint8Array of the amounts for the instruction
-  const data: Uint8Array = formatPumpfunBuyAmount(
-    amountInTokens,
-    maxSolToSpend
-  );
+  const data: Uint8Array = formatPumpfunBuyAmount(amountInTokens, maxSolToSpend);
 
   // Get latest blockhash
-  const { value: latestBlockhash } = await connection.rpc
-    .getLatestBlockhash()
-    .send();
+  const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
 
   // Convert the mint address to type address for ease of use
   const mintAddress = address(mint);
 
   // Get the bondingCurve account
   const [bondingCurve, _bondingBump] = await getProgramDerivedAddress({
-    seeds: ["bonding-curve", mintAddress],
+    seeds: ['bonding-curve', ADDRESS_ENCODER.encode(mintAddress)],
     programAddress: address(PUMPFUN_PROGRAM_ID),
   });
 
-  console.log("Bonding Curve: ", bondingCurve);
+  console.log('Bonding Curve: ', bondingCurve);
 
   // Get the bonding curve ata
   const [bondingCurveAta, _bondingCurveBump] = await findAssociatedTokenPda({
@@ -81,14 +80,15 @@ export const pumpfunBuy = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
+  console.log('Bonding curve ata', bondingCurveAta);
+
   // Get the users ata for the mint
   const userAta = await getAssociatedTokenAccountAddress(
     mintAddress,
     signer.address,
     TOKEN_PROGRAM_ADDRESS
   );
-
-  console.log("userATA: ", userAta);
+  console.log(userAta);
 
   // Instruction to get the users ata
   const userAtaIx = getCreateAssociatedTokenIdempotentInstruction({
@@ -96,9 +96,9 @@ export const pumpfunBuy = async (
     owner: signer.address,
     payer: signer,
     ata: userAta,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
-
-  console.log("get user ata: ", userAtaIx);
 
   // Buy pumpfun token instruction
   const buyTokenIx: IInstruction = {
@@ -144,7 +144,7 @@ export const pumpfunBuy = async (
   // Build buy transaction
   const tx = createTransaction({
     feePayer: signer,
-    version: "legacy",
+    version: 'legacy',
     instructions: [userAtaIx, buyTokenIx],
     latestBlockhash,
   });
@@ -154,7 +154,7 @@ export const pumpfunBuy = async (
 
   // Returns the explorer link to the transaction
   console.log(
-    "Explorer: ",
+    'Explorer: ',
     getExplorerLink({
       transaction: getSignatureFromTransaction(signedTransaction),
     })
@@ -162,12 +162,10 @@ export const pumpfunBuy = async (
 
   // Make sure the transaction lands and return any results
   try {
-    const results = await connection.sendAndConfirmTransaction(
-      signedTransaction
-    );
+    const results = await connection.sendAndConfirmTransaction(signedTransaction);
     return { success: true, data: results };
   } catch (error) {
-    console.log("Error with sending and confirming transaction", error);
+    console.log('Error with sending and confirming transaction', error);
     return { success: false, data: error };
   }
 };
