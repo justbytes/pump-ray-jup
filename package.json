@@ -1,28 +1,26 @@
 {
-  "name": "coding",
-  "version": "1.0.0",
-  "description": "An easy way to buy, sell, and get pump.fun data",
-  "main": "index.js",
-  "author": "",
-  "license": "MIT",
-  "homepage": "https://github.com/justbytes/pump_fun_oracle#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/justbytes/pump_fun_oracle.git"
-  },
-  "bugs": {
-    "url": "https://github.com/justbytes/pump_fun_oracle/issues"
-  },
+  "name": "swaracle",
+  "version": "0.1.0",
+  "description": "The ultimate token swap oracle built for Solana",
+  "main": "index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc --noEmit && esrun esbuild.config.js",
+    "dev": "esrun src/index.ts",
+    "start": "esrun dist/bundle.js"
   },
+  "keywords": [],
+  "author": "justbytes",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.6.4",
   "dependencies": {
     "dotenv": "^16.5.0",
     "esrun": "^3.2.26",
-    "gill": "^0.8.2"
+    "gill": "^0.8.3"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "@types/node": "^22.14.1"
+    "@types/node": "^22.15.2",
+    "esbuild": "^0.25.3",
+    "typescript": "^5.8.3"
   }
 }
