@@ -27,108 +27,14 @@ import {
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
 } from './constants';
-import { decodeBondingCurveAccount } from './utils';
 
-/**
- * Function to estimate the minimum tokens a user will receive for a given SOL amount
- * PumpFun uses ONLY virtual reserves for bonding curve calculations
- * Uses the constant product formula: (x + dx) * (y - dy) = x * y
- * Where x = solReserves, y = tokenReserves, dx = solAmount, dy = tokensOut
- *
- * @param {any} accountInfo The account info containing bonding curve data
- * @param {number} solAmount Amount of SOL in lamports to spend
- * @param {number} slippage Slippage tolerance (0.01 = 1%)
- */
-export const estimatePumpfunMinAmountOut = (
-  accountInfo: any,
-  solAmount: number,
-  slippage: number
-) => {
-  // Parse the account data
-  const base64Data = accountInfo.value.data[0];
-  const dataBuffer = Buffer.from(base64Data, 'base64');
-
-  // Decode the bonding curve account data
-  const bondingCurve = decodeBondingCurveAccount(dataBuffer);
-
-  // Convert BigInts to Numbers for calculation
-  // Note: This could lose precision for very large numbers
-  const virtualTokenReserves = Number(bondingCurve.virtualTokenReserves);
-  const virtualSolReserves = Number(bondingCurve.virtualSolReserves);
-  const realTokenReserves = Number(bondingCurve.realTokenReserves);
-  const realSolReserves = Number(bondingCurve.realSolReserves);
-
-  // Calculate constant product k = virtualTokenReserves * virtualSolReserves
-  const k = virtualTokenReserves * virtualSolReserves;
-
-  // New virtual SOL reserves after purchase: x' = x + dx
-  const newVirtualSolReserves = virtualSolReserves + solAmount;
-
-  // New virtual token reserves to maintain constant product: y' = k / x'
-  const newVirtualTokenReserves = k / newVirtualSolReserves;
-
-  // Calculate tokens received: dy = y - y'
-  const tokensReceived = virtualTokenReserves - newVirtualTokenReserves;
-
-  // Apply fee (PumpFun charges a 1% fee for buying/selling on the bonding curve)
-  const feeBasisPoints = 100; // 1% = 100 basis points
-  const feeFactor = 1 - feeBasisPoints / 10000;
-  const tokensAfterFee = tokensReceived * feeFactor;
-
-  // console.log('=== Bonding Curve Details ===');
-  // console.log('Virtual Token Reserves:', virtualTokenReserves);
-  // console.log('Virtual SOL Reserves:', virtualSolReserves);
-  // console.log('Real Token Reserves:', realTokenReserves);
-  // console.log('Real SOL Reserves:', realSolReserves);
-  // console.log('New Virtual SOL Reserves after purchase:', newVirtualSolReserves);
-  // console.log('New Virtual Token Reserves to maintain k:', newVirtualTokenReserves);
-  // console.log('Tokens Received (before fees):', tokensReceived);
-  // console.log('Tokens Received (after 1% fee):', tokensAfterFee);
-
-  // Return the estimated amount out and the amount with the slippage
-  return {
-    estimatedAmountOut: Math.floor(tokensAfterFee),
-    minimumAmountOut: Math.floor(tokensAfterFee * (1 - slippage)),
-  };
-};
-
-/**
- * Format the data for the buy instruction
- * @param {number} minTokenAmount Minimum amount of tokens to receive
- * @param {number} maxSolToSpend Maximum amount of SOL to spend
- */
-export const formatPumpfunBuyData = (minTokenAmount: number, maxSolToSpend: number) => {
-  // Create the data buffer
-  const dataBuffer = Buffer.alloc(24);
-
-  // Write the discriminator for the 'buy' instruction
-  dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
-
-  // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
-  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
-
-  return new Uint8Array(dataBuffer);
-};
-
-/**
- * Buys a token from pumpfun with a given sol amount and a slippage tolerance
- * @param {string} mint
- * @param {number} solAmount
- * @param {number} slippage
- * @param {KeyPairSigner} signer
- * @param {any} connection
- * @returns
- */
-export const pumpfunBuy = async (
+export const pumpfunSell = async (
   mint: string,
   solAmount: number,
   slippage: number,
   signer: KeyPairSigner,
   connection: any
 ) => {
-  // console.log(`Buying tokens with ${solAmount} SOL and ${slippage * 100}% slippage`);
-
   // Validate inputs
   if (solAmount <= 0) {
     return {
@@ -207,7 +113,7 @@ export const pumpfunBuy = async (
   );
 
   // Format the instruction data
-  const data: Uint8Array = formatPumpfunBuyData(minimumAmountOut, solAmountLamports);
+  const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, solAmountLamports);
 
   // console.log('=== Buy Details ===');
   // console.log('Mint Address:', mintAddress);
@@ -279,7 +185,7 @@ export const pumpfunBuy = async (
   const tx = createTransaction({
     feePayer: signer,
     version: 'legacy',
-    instructions: [userAtaIx, buyTokenIx],
+    instructions: [userAtaIx, sellTokenIx],
     latestBlockhash,
   });
 
