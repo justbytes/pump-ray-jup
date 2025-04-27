@@ -1,4 +1,4 @@
-import { createSolanaClient, KeyPairSigner } from 'gill';
+import { address, createSolanaClient, KeyPairSigner } from 'gill';
 import { loadKeypairSignerFromFile } from 'gill/node';
 
 import { pumpfunBuy } from './src/buy';
@@ -16,11 +16,11 @@ async function main() {
   const signer: KeyPairSigner = await loadKeypairSignerFromFile();
 
   // For testing purposes
-  const amountInTokens = 0;
-  const maxSolToSpend = 0.0001;
+  const slippage = 0.01; // 1% slippage
+  const solAmount = 0.0001; // Buy 0.0001 sol worth
 
   // Test the buy
-  const response = await pumpfunBuy(mint, amountInTokens, maxSolToSpend, signer, connection);
+  const response = await pumpfunBuy(mint, solAmount, slippage, signer, connection);
 
   console.log('Buy transaction response', response);
 }
