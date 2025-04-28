@@ -9,15 +9,15 @@ import {
   IInstruction,
   KeyPairSigner,
   signTransactionMessageWithSigners,
-} from 'gill';
-import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
+} from "gill";
+import { SYSTEM_PROGRAM_ADDRESS } from "gill/programs";
 import {
   findAssociatedTokenPda,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
   getCreateAssociatedTokenInstruction,
   TOKEN_PROGRAM_ADDRESS,
-} from 'gill/programs/token';
+} from "gill/programs/token";
 
 // Local Imports
 import {
@@ -26,8 +26,8 @@ import {
   PUMPFUN_GLOBAL,
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
-} from './constants';
-import { decodeBondingCurveAccount } from './utils';
+} from "./constants";
+import { decodeBondingCurveAccount } from "./utils";
 
 /**
  * Function to estimate the minimum tokens a user will receive for a given SOL amount
@@ -46,7 +46,7 @@ export const estimatePumpfunMinAmountOut = (
 ) => {
   // Parse the account data
   const base64Data = accountInfo.value.data[0];
-  const dataBuffer = Buffer.from(base64Data, 'base64');
+  const dataBuffer = Buffer.from(base64Data, "base64");
 
   // Decode the bonding curve account data
   const bondingCurve = decodeBondingCurveAccount(dataBuffer);
@@ -97,12 +97,15 @@ export const estimatePumpfunMinAmountOut = (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export const formatPumpfunBuyData = (minTokenAmount: number, maxSolToSpend: number) => {
+export const formatPumpfunBuyData = (
+  minTokenAmount: number,
+  maxSolToSpend: number
+) => {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
   // Write the discriminator for the 'buy' instruction
-  dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
+  dataBuffer.write("66063d1201daebea", "hex"); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
   dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
@@ -133,19 +136,21 @@ export const pumpfunBuy = async (
   if (solAmount <= 0) {
     return {
       success: false,
-      data: 'Error: solAmount must be greater than zero',
+      data: "Error: solAmount must be greater than zero",
     };
   }
 
   if (slippage < 0 || slippage > 1) {
     return {
       success: false,
-      data: 'Error: slippage must be between 0 and 1',
+      data: "Error: slippage must be between 0 and 1",
     };
   }
 
   // Get latest blockhash
-  const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
+  const { value: latestBlockhash } = await connection.rpc
+    .getLatestBlockhash()
+    .send();
 
   // Convert the mint address to type address for ease of use
   const mintAddress = address(mint);
@@ -153,7 +158,7 @@ export const pumpfunBuy = async (
   // Get the bondingCurve PDA
   const ADDRESS_ENCODER = getAddressEncoder();
   const [bondingCurve, _bondingBump] = await getProgramDerivedAddress({
-    seeds: ['bonding-curve', ADDRESS_ENCODER.encode(mintAddress)],
+    seeds: ["bonding-curve", ADDRESS_ENCODER.encode(mintAddress)],
     programAddress: address(PUMPFUN_PROGRAM_ID),
   });
 
@@ -184,7 +189,7 @@ export const pumpfunBuy = async (
   // Get bonding curve account data
   const accountInfo = await connection.rpc
     .getAccountInfo(bondingCurve, {
-      encoding: 'base64',
+      encoding: "base64",
     })
     .send();
 
@@ -192,7 +197,7 @@ export const pumpfunBuy = async (
   if (!accountInfo || !accountInfo.value) {
     return {
       success: false,
-      data: 'Error: Bonding curve account not found',
+      data: "Error: Bonding curve account not found",
     };
   }
 
@@ -207,7 +212,10 @@ export const pumpfunBuy = async (
   );
 
   // Format the instruction data
-  const data: Uint8Array = formatPumpfunBuyData(minimumAmountOut, solAmountLamports);
+  const data: Uint8Array = formatPumpfunBuyData(
+    minimumAmountOut,
+    solAmountLamports
+  );
 
   // console.log('=== Buy Details ===');
   // console.log('Mint Address:', mintAddress);
@@ -278,7 +286,7 @@ export const pumpfunBuy = async (
   // Build the transaction
   const tx = createTransaction({
     feePayer: signer,
-    version: 'legacy',
+    version: "legacy",
     instructions: [userAtaIx, buyTokenIx],
     latestBlockhash,
   });
@@ -291,11 +299,13 @@ export const pumpfunBuy = async (
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log('Transaction Explorer Link:\n', explorerLink);
+  console.log("Transaction Explorer Link:\n", explorerLink);
 
   try {
     // Send and confirm the transaction
-    const signature = await connection.sendAndConfirmTransaction(signedTransaction);
+    const signature = await connection.sendAndConfirmTransaction(
+      signedTransaction
+    );
 
     return {
       success: true,
@@ -305,7 +315,6 @@ export const pumpfunBuy = async (
       },
     };
   } catch (error) {
-    console.error('Error executing sendAndConfirmTransaction:', error);
     return { success: false, data: { explorerLink, error } };
   }
 };
