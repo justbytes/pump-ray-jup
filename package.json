@@ -14,6 +14,7 @@
   "type": "module",
   "packageManager": "pnpm@10.6.4",
   "dependencies": {
+    "dotenv": "^16.5.0",
     "esrun": "^3.2.26",
     "gill": "^0.8.3"
   },
