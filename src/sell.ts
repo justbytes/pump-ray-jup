@@ -9,15 +9,15 @@ import {
   IInstruction,
   KeyPairSigner,
   signTransactionMessageWithSigners,
-} from 'gill';
-import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
+} from "gill";
+import { SYSTEM_PROGRAM_ADDRESS } from "gill/programs";
 import {
   findAssociatedTokenPda,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
   getCreateAssociatedTokenInstruction,
   TOKEN_PROGRAM_ADDRESS,
-} from 'gill/programs/token';
+} from "gill/programs/token";
 
 // Local Imports
 import {
@@ -26,7 +26,7 @@ import {
   PUMPFUN_GLOBAL,
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
-} from './constants';
+} from "./constants";
 
 export const pumpfunSell = async (
   mint: string,
@@ -39,19 +39,21 @@ export const pumpfunSell = async (
   if (solAmount <= 0) {
     return {
       success: false,
-      data: 'Error: solAmount must be greater than zero',
+      data: "Error: solAmount must be greater than zero",
     };
   }
 
   if (slippage < 0 || slippage > 1) {
     return {
       success: false,
-      data: 'Error: slippage must be between 0 and 1',
+      data: "Error: slippage must be between 0 and 1",
     };
   }
 
   // Get latest blockhash
-  const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
+  const { value: latestBlockhash } = await connection.rpc
+    .getLatestBlockhash()
+    .send();
 
   // Convert the mint address to type address for ease of use
   const mintAddress = address(mint);
@@ -59,7 +61,7 @@ export const pumpfunSell = async (
   // Get the bondingCurve PDA
   const ADDRESS_ENCODER = getAddressEncoder();
   const [bondingCurve, _bondingBump] = await getProgramDerivedAddress({
-    seeds: ['bonding-curve', ADDRESS_ENCODER.encode(mintAddress)],
+    seeds: ["bonding-curve", ADDRESS_ENCODER.encode(mintAddress)],
     programAddress: address(PUMPFUN_PROGRAM_ID),
   });
 
@@ -90,7 +92,7 @@ export const pumpfunSell = async (
   // Get bonding curve account data
   const accountInfo = await connection.rpc
     .getAccountInfo(bondingCurve, {
-      encoding: 'base64',
+      encoding: "base64",
     })
     .send();
 
@@ -98,7 +100,7 @@ export const pumpfunSell = async (
   if (!accountInfo || !accountInfo.value) {
     return {
       success: false,
-      data: 'Error: Bonding curve account not found',
+      data: "Error: Bonding curve account not found",
     };
   }
 
@@ -106,14 +108,14 @@ export const pumpfunSell = async (
   const solAmountLamports = solAmount * 1e9;
 
   // Calculate token output with slippage
-  const { estimatedAmountOut, minimumAmountOut } = estimatePumpfunMinAmountOut(
-    accountInfo,
-    solAmountLamports,
-    slippage
-  );
+  // const { estimatedAmountOut, minimumAmountOut } = estimatePumpfunMinAmountOut(
+  //   accountInfo,
+  //   solAmountLamports,
+  //   slippage
+  // );
 
   // Format the instruction data
-  const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, solAmountLamports);
+  // const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, solAmountLamports);
 
   // console.log('=== Buy Details ===');
   // console.log('Mint Address:', mintAddress);
@@ -178,14 +180,14 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
     ],
-    data,
+    //data,
   };
 
   // Build the transaction
   const tx = createTransaction({
     feePayer: signer,
-    version: 'legacy',
-    instructions: [userAtaIx, sellTokenIx],
+    version: "legacy",
+    instructions: [userAtaIx],
     latestBlockhash,
   });
 
@@ -197,11 +199,13 @@ export const pumpfunSell = async (
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log('Transaction Explorer Link:\n', explorerLink);
+  console.log("Transaction Explorer Link:\n", explorerLink);
 
   try {
     // Send and confirm the transaction
-    const signature = await connection.sendAndConfirmTransaction(signedTransaction);
+    const signature = await connection.sendAndConfirmTransaction(
+      signedTransaction
+    );
 
     return {
       success: true,
@@ -211,7 +215,7 @@ export const pumpfunSell = async (
       },
     };
   } catch (error) {
-    console.error('Error executing sendAndConfirmTransaction:', error);
+    console.error("Error executing sendAndConfirmTransaction:", error);
     return { success: false, data: { explorerLink, error } };
   }
 };

@@ -4,15 +4,12 @@
  */
 export const decodeBondingCurveAccount = (buffer: Buffer) => {
   if (buffer.length < 49) {
-    console.error('Buffer too small for bonding curve data:', buffer.length);
-    throw new Error('Buffer too small to contain bonding curve data');
+    console.error("Buffer too small for bonding curve data:", buffer.length);
+    throw new Error("Buffer too small to contain bonding curve data");
   }
 
   // First 8 bytes are the Anchor discriminator
   const discriminator = buffer.slice(0, 8);
-
-  // Debugging: Show discriminator
-  console.log('Discriminator (hex):', discriminator.toString('hex'));
 
   // Read the u64 fields (8 bytes each, little-endian)
   const virtualTokenReserves = buffer.readBigUInt64LE(8);
@@ -26,6 +23,7 @@ export const decodeBondingCurveAccount = (buffer: Buffer) => {
 
   // Log the values for debugging
   // console.log('=== Bonding Curve Raw Values ===');
+  // console.log('Discriminator (hex):', discriminator.toString('hex'));
   // console.log('virtualTokenReserves:', virtualTokenReserves.toString());
   // console.log('virtualSolReserves:', virtualSolReserves.toString());
   // console.log('realTokenReserves:', realTokenReserves.toString());
@@ -34,7 +32,7 @@ export const decodeBondingCurveAccount = (buffer: Buffer) => {
   // console.log('complete:', complete);
 
   return {
-    discriminator: discriminator.toString('hex'),
+    discriminator: discriminator.toString("hex"),
     virtualTokenReserves,
     virtualSolReserves,
     realTokenReserves,
