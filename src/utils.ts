@@ -1,4 +1,16 @@
-import { FullySignedTransaction, getBase64EncodedWireTransaction, Transaction } from 'gill';
+import {
+  FullySignedTransaction,
+  getBase64EncodedWireTransaction,
+  Transaction,
+} from "gill";
+
+interface HeliusPriorityFeeResponse {
+  jsonrpc: string;
+  result: {
+    priorityFeeEstimate: number;
+  };
+  id: string;
+}
 
 /**
  * Bonding curve decoding function with detailed debugging
@@ -6,8 +18,8 @@ import { FullySignedTransaction, getBase64EncodedWireTransaction, Transaction } 
  */
 export const decodeBondingCurveAccount = (buffer: Buffer) => {
   if (buffer.length < 49) {
-    console.error('Buffer too small for bonding curve data:', buffer.length);
-    throw new Error('Buffer too small to contain bonding curve data');
+    console.error("Buffer too small for bonding curve data:", buffer.length);
+    throw new Error("Buffer too small to contain bonding curve data");
   }
 
   // First 8 bytes are the Anchor discriminator
@@ -34,7 +46,7 @@ export const decodeBondingCurveAccount = (buffer: Buffer) => {
   // console.log('complete:', complete);
 
   return {
-    discriminator: discriminator.toString('hex'),
+    discriminator: discriminator.toString("hex"),
     virtualTokenReserves,
     virtualSolReserves,
     realTokenReserves,
@@ -44,24 +56,37 @@ export const decodeBondingCurveAccount = (buffer: Buffer) => {
   };
 };
 
-export const getPriorityFees = async (rpcUrl: string, signedTransaction: any) => {
+export const getPriorityFees = async (
+  rpcUrl: string,
+  signedTransaction: any
+) => {
   const priorityFeeResponse = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'helius-priority-fee',
-      method: 'getPriorityFeeEstimate',
+      jsonrpc: "2.0",
+      id: "helius-priority-fee",
+      method: "getPriorityFeeEstimate",
       params: [
         {
           transaction: getBase64EncodedWireTransaction(signedTransaction),
           options: {
-            transactionEncoding: 'base64',
+            transactionEncoding: "base64",
             recommended: true,
           },
         },
       ],
     }),
   });
-  return await priorityFeeResponse.json();
+  try {
+    const response: any = await priorityFeeResponse.json();
+    if (!response) {
+      throw new Error(
+        "Something went wrong with getting compute unit price estimate from Helius"
+      );
+    }
+    return response.result.priorityFeeEstimate;
+  } catch (error) {
+    throw new Error("Helius priority fee call failed");
+  }
 };
