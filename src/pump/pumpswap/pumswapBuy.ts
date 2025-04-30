@@ -19,6 +19,7 @@ import {
 import { estimatePumpswapMinTokensOut } from '../pool';
 import { getPriorityFees } from '../../helpers/helpers';
 import { PUMPSWAP_PROGRAM_ID } from '../constants';
+import { getGlobalConfigPda } from '../utils';
 
 /**
  * Buys from PumpSwap after a token graduates
@@ -81,6 +82,9 @@ export const pumpswapBuy = async (
   // Convert SOL to lamports
   const solAmountLamports = solAmount * 1e9;
 
+  // ge
+  // Get pool data
+
   // Calculate token output with slippage
   const { success, message, poolData, estimatedAmountOut, minimumAmountOut } =
     await estimatePumpswapMinTokensOut(mintAddress, connection, solAmountLamports, slippage);
@@ -106,7 +110,7 @@ export const pumpswapBuy = async (
         role: AccountRole.WRITABLE_SIGNER,
       },
       {
-        address: address('ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw'), // global_config
+        address: address(await getGlobalConfigPda()), // global_config
         role: AccountRole.READONLY,
       },
       {

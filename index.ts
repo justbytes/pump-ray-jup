@@ -5,8 +5,9 @@ import { loadKeypairSignerFromFile } from 'gill/node';
 import { pumpfunBuy } from './src/pump/pumpfun/pumpfunBuy';
 import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
 import { getBondingCurveData, getPumpfunPrice } from './src/pump/bondingCurve';
-import { fetchGlobalState } from './src/pump/utils';
+import { fetchGlobalState, getGlobalConfigPda } from './src/pump/utils';
 import { pumpswapBuy } from './src/pump/pumpswap/pumswapBuy';
+import { getPoolPda, getPoolData, getPumpPoolAuthorityPda } from './src/pump/pool';
 dotenv.config();
 
 async function main() {
@@ -64,7 +65,15 @@ async function main() {
   //   process.env.HELIUS_URL?.toString()
   // );
 
-  const response = await getBondingCurveData(address(mint), connection);
+  const auth = await getPumpPoolAuthorityPda(address(mint));
+
+  const response = await getPoolPda(
+    auth,
+    address(mint),
+    address('So11111111111111111111111111111111111111112')
+  );
+
+  console.log(auth);
 
   console.log('Buy transaction response', response);
 }
