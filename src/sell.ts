@@ -2,22 +2,19 @@ import {
   AccountRole,
   address,
   createTransaction,
-  getAddressEncoder,
   getExplorerLink,
-  getProgramDerivedAddress,
   getSignatureFromTransaction,
   IInstruction,
   KeyPairSigner,
   signTransactionMessageWithSigners,
-} from "gill";
-import { SYSTEM_PROGRAM_ADDRESS } from "gill/programs";
+} from 'gill';
+import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
-  findAssociatedTokenPda,
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
-  getCreateAssociatedTokenInstruction,
   TOKEN_PROGRAM_ADDRESS,
-} from "gill/programs/token";
+} from 'gill/programs/token';
 
 // Local Imports
 import {
@@ -26,51 +23,72 @@ import {
   PUMPFUN_GLOBAL,
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
-} from "./constants";
+} from './constants';
+import { fetchGlobalState, getPriorityFees } from './utils';
+import { estimatePumpfunMinSolOut, estimatePumpfunMinTokensOut } from './bondingCurve';
 
+// Custom type of reponse from calling pumpfunSell
+export type SwapResponse = {
+  sucess: boolean;
+  message?: string;
+  data?: Object;
+};
+
+// global.__GILL_DEBUG__ = true;
+// global.__GILL_DEBUG_LEVEL__ = 'debug';
+
+/**
+ * Sells a token from pumpfun with a given sol amount and a slippage tolerance
+ * @param {string} mint
+ * @param {number} tokenAmount
+ * @param {number} slippage
+ * @param {KeyPairSigner} signer
+ * @param {any} connection
+ * @param {string?} rpcUrl?
+ * @param {number?} computeUnitLimit
+ * @param {number?} computeUnitPrice
+ * @returns
+ */
 export const pumpfunSell = async (
   mint: string,
-  solAmount: number,
+  tokenAmount: number,
   slippage: number,
   signer: KeyPairSigner,
-  connection: any
+  connection: any,
+  rpcUrl?: string,
+  computeUnitLimit?: number,
+  computeUnitPrice?: number
 ) => {
+  // console.log(`Selling tokens with ${tokenAmount} SOL and ${slippage * 100}% slippage`);
+
   // Validate inputs
-  if (solAmount <= 0) {
+  if (tokenAmount <= 0) {
     return {
       success: false,
-      data: "Error: solAmount must be greater than zero",
+      message: 'Error: tokenAmount must be greater than zero',
     };
   }
 
   if (slippage < 0 || slippage > 1) {
     return {
       success: false,
-      data: "Error: slippage must be between 0 and 1",
+      message: 'Error: slippage must be between 0 and 1',
     };
   }
 
-  // Get latest blockhash
-  const { value: latestBlockhash } = await connection.rpc
-    .getLatestBlockhash()
-    .send();
+  if (rpcUrl && computeUnitPrice) {
+    return {
+      success: false,
+      message:
+        'Error: cannot pass both rpcUrl and computeUnitPrice. One or the other, rpcUrl gets Helius computeUnitPrice estimate',
+    };
+  }
 
-  // Convert the mint address to type address for ease of use
+  // Convert the mint address to type address
   const mintAddress = address(mint);
 
-  // Get the bondingCurve PDA
-  const ADDRESS_ENCODER = getAddressEncoder();
-  const [bondingCurve, _bondingBump] = await getProgramDerivedAddress({
-    seeds: ["bonding-curve", ADDRESS_ENCODER.encode(mintAddress)],
-    programAddress: address(PUMPFUN_PROGRAM_ID),
-  });
-
-  // Get the bonding curve ATA
-  const [bondingCurveAta, _bondingCurveBump] = await findAssociatedTokenPda({
-    mint: mintAddress,
-    owner: bondingCurve,
-    tokenProgram: TOKEN_PROGRAM_ADDRESS,
-  });
+  // Get latest blockhash
+  const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
 
   // Get the user's ATA for the token
   const userAta = await getAssociatedTokenAccountAddress(
@@ -79,7 +97,7 @@ export const pumpfunSell = async (
     TOKEN_PROGRAM_ADDRESS
   );
 
-  // Instruction to create the user's ATA (idempotent)
+  // Instruction to create the user's ATA
   const userAtaIx = getCreateAssociatedTokenIdempotentInstruction({
     mint: mintAddress,
     owner: signer.address,
@@ -89,46 +107,23 @@ export const pumpfunSell = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
-  // Get bonding curve account data
-  const accountInfo = await connection.rpc
-    .getAccountInfo(bondingCurve, {
-      encoding: "base64",
-    })
-    .send();
-
-  // Make sure bonding curve account info is there
-  if (!accountInfo || !accountInfo.value) {
-    return {
-      success: false,
-      data: "Error: Bonding curve account not found",
-    };
-  }
-
   // Convert SOL to lamports
-  const solAmountLamports = solAmount * 1e9;
+  const tokenAmountInDecimals = tokenAmount * 1e6;
 
   // Calculate token output with slippage
-  // const { estimatedAmountOut, minimumAmountOut } = estimatePumpfunMinAmountOut(
-  //   accountInfo,
-  //   solAmountLamports,
-  //   slippage
-  // );
+  const { success, message, bondingCurveData, estimatedAmountOut, minimumAmountOut } =
+    await estimatePumpfunMinSolOut(mintAddress, connection, tokenAmountInDecimals, slippage);
+
+  if (!success) {
+    console.log('Response from esitmatePumpfunMinTokensOut success was false.');
+    return { success, message, data: bondingCurveData };
+  }
 
   // Format the instruction data
-  // const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, solAmountLamports);
+  const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, tokenAmountInDecimals);
 
-  // console.log('=== Buy Details ===');
-  // console.log('Mint Address:', mintAddress);
-  // console.log('Bonding Curve PDA:', bondingCurve);
-  // console.log('Bonding Curve ATA:', bondingCurveAta);
-  // console.log('User ATA:', userAta);
-  // console.log('Bonding Curve Account Info:', accountInfo);
-  // console.log('SOL Amount in Lamports:', solAmountLamports);
-  // console.log('Estimated Tokens Out:', estimatedAmountOut);
-  // console.log('Minimum Tokens Out (with slippage):', minimumAmountOut);
-
-  // Create the buy instruction
-  const buyTokenIx: IInstruction = {
+  // Create the Sell instruction
+  const sellTokenIx: IInstruction = {
     programAddress: address(PUMPFUN_PROGRAM_ID),
     accounts: [
       {
@@ -136,7 +131,7 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(PUMPFUN_FEE_RECIPIENT), // Pump fun fee recipient
+        address: await fetchGlobalState(connection), // Pump fun fee recipient
         role: AccountRole.WRITABLE,
       },
       {
@@ -144,11 +139,11 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(bondingCurve), // Bonding curve
+        address: address(bondingCurveData.address), // Bonding curve
         role: AccountRole.WRITABLE,
       },
       {
-        address: address(bondingCurveAta), // Bonding curve ATA
+        address: address(bondingCurveData.ata), // Bonding curve ATA
         role: AccountRole.WRITABLE,
       },
       {
@@ -164,11 +159,11 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(TOKEN_PROGRAM_ADDRESS), // Token program
+        address: address(ASSOCIATED_TOKEN_PROGRAM_ADDRESS), // Associate Token Program
         role: AccountRole.READONLY,
       },
       {
-        address: address(SYSVAR_RENT), // Sysvar Rent
+        address: address(TOKEN_PROGRAM_ADDRESS), // Token program
         role: AccountRole.READONLY,
       },
       {
@@ -180,33 +175,60 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
     ],
-    //data,
+    data,
   };
 
-  // Build the transaction
-  const tx = createTransaction({
-    feePayer: signer,
-    version: "legacy",
-    instructions: [userAtaIx],
-    latestBlockhash,
-  });
+  let tx, signedTransaction;
 
-  // Sign the transaction
-  const signedTransaction = await signTransactionMessageWithSigners(tx);
+  // Creates a transaction that will use the Helius api to get the estimated priority fee
+  if (rpcUrl) {
+    tx = createTransaction({
+      feePayer: signer,
+      version: 'legacy',
+      instructions: [userAtaIx, sellTokenIx],
+      latestBlockhash,
+      computeUnitLimit,
+    });
+
+    // Sign the transaction
+    signedTransaction = await signTransactionMessageWithSigners(tx);
+
+    // Use signed transaction to get priority fee
+    const priorityFeeEstimate: number = await getPriorityFees(rpcUrl, signedTransaction);
+
+    // The final tx
+    tx = createTransaction({
+      feePayer: signer,
+      version: 'legacy',
+      instructions: [userAtaIx, sellTokenIx],
+      latestBlockhash,
+      computeUnitLimit,
+      computeUnitPrice: priorityFeeEstimate,
+    });
+  } else {
+    // Use default values or values user passed for computeUnitLimit and computeUnitPrice
+    tx = createTransaction({
+      feePayer: signer,
+      version: 'legacy',
+      instructions: [userAtaIx, sellTokenIx],
+      latestBlockhash,
+      computeUnitLimit,
+      computeUnitPrice,
+    });
+  }
+
+  signedTransaction = await signTransactionMessageWithSigners(tx);
 
   // Get the explorer link for debugging
   const explorerLink = getExplorerLink({
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log("Transaction Explorer Link:\n", explorerLink);
+  console.log('| SELL | Transaction Explorer Link:\n', explorerLink);
 
+  // Send and confirm the transaction or return the error
   try {
-    // Send and confirm the transaction
-    const signature = await connection.sendAndConfirmTransaction(
-      signedTransaction
-    );
-
+    const signature = await connection.sendAndConfirmTransaction(signedTransaction);
     return {
       success: true,
       data: {
@@ -215,7 +237,28 @@ export const pumpfunSell = async (
       },
     };
   } catch (error) {
-    console.error("Error executing sendAndConfirmTransaction:", error);
-    return { success: false, data: { explorerLink, error } };
+    return {
+      success: false,
+      message: 'There was an error with the sendAndConfirmTransaction',
+      data: { error, explorerLink },
+    };
   }
 };
+
+/**
+ * Format the data for the sell instruction
+ * @param {number} minTokenAmount Minimum amount of tokens to receive
+ * @param {number} maxSolToSpend Maximum amount of SOL to spend
+ */
+export function formatPumpfunSellData(minSolAmount: number, maxTokensToSpend: number) {
+  // Create the data buffer
+  const dataBuffer = Buffer.alloc(24);
+
+  // Write the discriminator for the 'sell' instruction
+  dataBuffer.write('33e685a4017f83ad', 'hex'); // Anchor discriminator for 'buy'
+
+  // Write the amounts to the buffer
+  dataBuffer.writeBigUInt64LE(BigInt(maxTokensToSpend), 8); // amount to sell
+  dataBuffer.writeBigInt64LE(BigInt(minSolAmount), 16);
+  return new Uint8Array(dataBuffer);
+}

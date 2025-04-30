@@ -2,22 +2,18 @@ import {
   AccountRole,
   address,
   createTransaction,
-  getAddressEncoder,
   getExplorerLink,
-  getProgramDerivedAddress,
   getSignatureFromTransaction,
   IInstruction,
   KeyPairSigner,
   signTransactionMessageWithSigners,
-} from "gill";
-import { SYSTEM_PROGRAM_ADDRESS } from "gill/programs";
+} from 'gill';
+import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
-  findAssociatedTokenPda,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
-  getCreateAssociatedTokenInstruction,
   TOKEN_PROGRAM_ADDRESS,
-} from "gill/programs/token";
+} from 'gill/programs/token';
 
 // Local Imports
 import {
@@ -26,98 +22,19 @@ import {
   PUMPFUN_GLOBAL,
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
-} from "./constants";
-import { decodeBondingCurveAccount, getPriorityFees } from "./utils";
+} from './constants';
+import { fetchGlobalState, getPriorityFees } from './utils';
+import { estimatePumpfunMinTokensOut } from './bondingCurve';
 
-export type ComputeUnitOptions = {
-  computeUnitLimit: number;
-  computeUnitPrice: number;
+// Custom type of reponse from calling pumpfunBuy
+export type SwapResponse = {
+  sucess: boolean;
+  message?: string;
+  data?: Object;
 };
 
-/**
- * Function to estimate the minimum tokens a user will receive for a given SOL amount
- * PumpFun uses ONLY virtual reserves for bonding curve calculations
- * Uses the constant product formula: (x + dx) * (y - dy) = x * y
- * Where x = solReserves, y = tokenReserves, dx = solAmount, dy = tokensOut
- *
- * @param {any} accountInfo The account info containing bonding curve data
- * @param {number} solAmount Amount of SOL in lamports to spend
- * @param {number} slippage Slippage tolerance (0.01 = 1%)
- */
-export const estimatePumpfunMinAmountOut = (
-  accountInfo: any,
-  solAmount: number,
-  slippage: number
-) => {
-  // Parse the account data
-  const base64Data = accountInfo.value.data[0];
-  const dataBuffer = Buffer.from(base64Data, "base64");
-
-  // Decode the bonding curve account data
-  const bondingCurve = decodeBondingCurveAccount(dataBuffer);
-
-  // Convert BigInts to Numbers for calculation
-  // Note: This could lose precision for very large numbers
-  const virtualTokenReserves = Number(bondingCurve.virtualTokenReserves);
-  const virtualSolReserves = Number(bondingCurve.virtualSolReserves);
-  const realTokenReserves = Number(bondingCurve.realTokenReserves);
-  const realSolReserves = Number(bondingCurve.realSolReserves);
-
-  // Calculate constant product k = virtualTokenReserves * virtualSolReserves
-  const k = virtualTokenReserves * virtualSolReserves;
-
-  // New virtual SOL reserves after purchase: x' = x + dx
-  const newVirtualSolReserves = virtualSolReserves + solAmount;
-
-  // New virtual token reserves to maintain constant product: y' = k / x'
-  const newVirtualTokenReserves = k / newVirtualSolReserves;
-
-  // Calculate tokens received: dy = y - y'
-  const tokensReceived = virtualTokenReserves - newVirtualTokenReserves;
-
-  // Apply fee (PumpFun charges a 1% fee for buying/selling on the bonding curve)
-  const feeBasisPoints = 100; // 1% = 100 basis points
-  const feeFactor = 1 - feeBasisPoints / 10000;
-  const tokensAfterFee = tokensReceived * feeFactor;
-
-  // console.log('=== Bonding Curve Details ===');
-  // console.log('Virtual Token Reserves:', virtualTokenReserves);
-  // console.log('Virtual SOL Reserves:', virtualSolReserves);
-  // console.log('Real Token Reserves:', realTokenReserves);
-  // console.log('Real SOL Reserves:', realSolReserves);
-  // console.log('New Virtual SOL Reserves after purchase:', newVirtualSolReserves);
-  // console.log('New Virtual Token Reserves to maintain k:', newVirtualTokenReserves);
-  // console.log('Tokens Received (before fees):', tokensReceived);
-  // console.log('Tokens Received (after 1% fee):', tokensAfterFee);
-
-  // Return the estimated amount out and the amount with the slippage
-  return {
-    estimatedAmountOut: Math.floor(tokensAfterFee),
-    minimumAmountOut: Math.floor(tokensAfterFee * (1 - slippage)),
-  };
-};
-
-/**
- * Format the data for the buy instruction
- * @param {number} minTokenAmount Minimum amount of tokens to receive
- * @param {number} maxSolToSpend Maximum amount of SOL to spend
- */
-export const formatPumpfunBuyData = (
-  minTokenAmount: number,
-  maxSolToSpend: number
-) => {
-  // Create the data buffer
-  const dataBuffer = Buffer.alloc(24);
-
-  // Write the discriminator for the 'buy' instruction
-  dataBuffer.write("66063d1201daebea", "hex"); // Anchor discriminator for 'buy'
-
-  // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
-  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
-
-  return new Uint8Array(dataBuffer);
-};
+// global.__GILL_DEBUG__ = true;
+// global.__GILL_DEBUG_LEVEL__ = 'debug';
 
 /**
  * Buys a token from pumpfun with a given sol amount and a slippage tolerance
@@ -147,43 +64,30 @@ export const pumpfunBuy = async (
   if (solAmount <= 0) {
     return {
       success: false,
-      data: "Error: solAmount must be greater than zero",
+      message: 'Error: solAmount must be greater than zero',
     };
   }
 
   if (slippage < 0 || slippage > 1) {
     return {
       success: false,
-      data: "Error: slippage must be between 0 and 1",
+      message: 'Error: slippage must be between 0 and 1',
     };
   }
 
   if (rpcUrl && computeUnitPrice) {
     return {
       success: false,
-      data: "Error: cannot pass both rpcUrl and computeUnitPrice. One or the other, rpcUrl gets Helius computeUnitPrice estimate",
+      message:
+        'Error: cannot pass both rpcUrl and computeUnitPrice. One or the other, rpcUrl gets Helius computeUnitPrice estimate',
     };
   }
 
-  // Get latest blockhash
-  const { value: latestBlockhash } = await connection.rpc
-    .getLatestBlockhash()
-    .send();
-
-  // Convert the mint address to type address for ease of use
+  // Convert the mint address to type address
   const mintAddress = address(mint);
 
-  const [bondingCurve, _bondingBump] = await getProgramDerivedAddress({
-    seeds: ["bonding-curve", getAddressEncoder().encode(mintAddress)],
-    programAddress: address(PUMPFUN_PROGRAM_ID),
-  });
-
-  // Get the bonding curve ATA
-  const [bondingCurveAta, _bondingCurveBump] = await findAssociatedTokenPda({
-    mint: mintAddress,
-    owner: bondingCurve,
-    tokenProgram: TOKEN_PROGRAM_ADDRESS,
-  });
+  // Get latest blockhash
+  const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
 
   // Get the user's ATA for the token
   const userAta = await getAssociatedTokenAccountAddress(
@@ -192,7 +96,7 @@ export const pumpfunBuy = async (
     TOKEN_PROGRAM_ADDRESS
   );
 
-  // Instruction to create the user's ATA (idempotent)
+  // Instruction to create the user's ATA
   const userAtaIx = getCreateAssociatedTokenIdempotentInstruction({
     mint: mintAddress,
     owner: signer.address,
@@ -202,46 +106,20 @@ export const pumpfunBuy = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
-  // Get bonding curve account data
-  const bondingCurveAccountInfo = await connection.rpc
-    .getAccountInfo(bondingCurve, {
-      encoding: "base64",
-    })
-    .send();
-
-  // Make sure bonding curve account info is there
-  if (!bondingCurveAccountInfo || !bondingCurveAccountInfo.value) {
-    return {
-      success: false,
-      data: "Error: Bonding curve account not found",
-    };
-  }
-
   // Convert SOL to lamports
   const solAmountLamports = solAmount * 1e9;
 
   // Calculate token output with slippage
-  const { estimatedAmountOut, minimumAmountOut } = estimatePumpfunMinAmountOut(
-    bondingCurveAccountInfo,
-    solAmountLamports,
-    slippage
-  );
+  const { success, message, bondingCurveData, estimatedAmountOut, minimumAmountOut } =
+    await estimatePumpfunMinTokensOut(mintAddress, connection, solAmountLamports, slippage);
+
+  if (!success) {
+    console.log('Response from esitmatePumpfunMinTokensOut success was false.');
+    return { success, message, data: bondingCurveData };
+  }
 
   // Format the instruction data
-  const data: Uint8Array = formatPumpfunBuyData(
-    minimumAmountOut,
-    solAmountLamports
-  );
-
-  // console.log('=== Buy Details ===');
-  // console.log('Mint Address:', mintAddress);
-  // console.log('Bonding Curve PDA:', bondingCurve);
-  // console.log('Bonding Curve ATA:', bondingCurveAta);
-  // console.log('User ATA:', userAta);
-  // console.log('Bonding Curve Account Info:', accountInfo);
-  // console.log('SOL Amount in Lamports:', solAmountLamports);
-  // console.log('Estimated Tokens Out:', estimatedAmountOut);
-  // console.log('Minimum Tokens Out (with slippage):', minimumAmountOut);
+  const data: Uint8Array = formatPumpfunBuyData(minimumAmountOut, solAmountLamports);
 
   // Create the buy instruction
   const buyTokenIx: IInstruction = {
@@ -252,7 +130,7 @@ export const pumpfunBuy = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(PUMPFUN_FEE_RECIPIENT), // Pump fun fee recipient
+        address: await fetchGlobalState(connection), // Pump fun fee recipient
         role: AccountRole.WRITABLE,
       },
       {
@@ -260,11 +138,11 @@ export const pumpfunBuy = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(bondingCurve), // Bonding curve
+        address: address(bondingCurveData.address), // Bonding curve
         role: AccountRole.WRITABLE,
       },
       {
-        address: address(bondingCurveAta), // Bonding curve ATA
+        address: address(bondingCurveData.ata), // Bonding curve ATA
         role: AccountRole.WRITABLE,
       },
       {
@@ -305,7 +183,7 @@ export const pumpfunBuy = async (
   if (rpcUrl) {
     tx = createTransaction({
       feePayer: signer,
-      version: "legacy",
+      version: 'legacy',
       instructions: [userAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
@@ -314,16 +192,13 @@ export const pumpfunBuy = async (
     // Sign the transaction
     signedTransaction = await signTransactionMessageWithSigners(tx);
 
-    const priorityFeeEstimate: number = await getPriorityFees(
-      rpcUrl,
-      signedTransaction
-    );
-    console.log(priorityFeeEstimate);
+    // Use signed transaction to get priority fee
+    const priorityFeeEstimate: number = await getPriorityFees(rpcUrl, signedTransaction);
 
     // The final tx
     tx = createTransaction({
       feePayer: signer,
-      version: "legacy",
+      version: 'legacy',
       instructions: [userAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
@@ -333,7 +208,7 @@ export const pumpfunBuy = async (
     // Use default values or values user passed for computeUnitLimit and computeUnitPrice
     tx = createTransaction({
       feePayer: signer,
-      version: "legacy",
+      version: 'legacy',
       instructions: [userAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
@@ -348,13 +223,11 @@ export const pumpfunBuy = async (
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log("Transaction Explorer Link:\n", explorerLink);
+  console.log('| BUY | Transaction Explorer Link:\n', explorerLink);
 
+  // Send and confirm the transaction or return the error
   try {
-    // Send and confirm the transaction
-    const signature = await connection.sendAndConfirmTransaction(
-      signedTransaction
-    );
+    const signature = await connection.sendAndConfirmTransaction(signedTransaction);
     return {
       success: true,
       data: {
@@ -363,6 +236,29 @@ export const pumpfunBuy = async (
       },
     };
   } catch (error) {
-    return { success: false, data: { explorerLink, error } };
+    return {
+      success: false,
+      message: 'There was an error with the sendAndConfirmTransaction',
+      data: { error, explorerLink },
+    };
   }
 };
+
+/**
+ * Format the data for the buy instruction
+ * @param {number} minTokenAmount Minimum amount of tokens to receive
+ * @param {number} maxSolToSpend Maximum amount of SOL to spend
+ */
+export function formatPumpfunBuyData(minTokenAmount: number, maxSolToSpend: number) {
+  // Create the data buffer
+  const dataBuffer = Buffer.alloc(24);
+
+  // Write the discriminator for the 'buy' instruction
+  dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
+
+  // Write the amounts to the buffer
+  dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
+  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
+
+  return new Uint8Array(dataBuffer);
+}
