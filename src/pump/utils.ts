@@ -1,5 +1,5 @@
 import { address, getBase64EncodedWireTransaction, getProgramDerivedAddress } from 'gill';
-import { PUMPFUN_PROGRAM_ID } from './constants';
+import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from './constants';
 import bs58 from 'bs58';
 
 export const fetchGlobalState = async (connection: any) => {
@@ -28,3 +28,13 @@ export const fetchGlobalState = async (connection: any) => {
   // Use gill's address function to convert the string to its address type
   return address(feeRecipientString);
 };
+
+// Get pumpswap global_config
+export async function getGlobalConfigPda() {
+  const [globalConfig, _globalConfigBump] = await getProgramDerivedAddress({
+    seeds: ['global_config'],
+    programAddress: address(PUMPSWAP_PROGRAM_ID),
+  });
+
+  return globalConfig;
+}
