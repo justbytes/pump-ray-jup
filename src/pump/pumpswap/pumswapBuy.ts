@@ -10,45 +10,20 @@ import {
 } from 'gill';
 import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from 'gill/programs/token';
 
-// Local Imports
-import {
-  PUMPFUN_EVENT_AUTHORITY,
-  PUMPFUN_FEE_RECIPIENT,
-  PUMPFUN_GLOBAL,
-  PUMPFUN_PROGRAM_ID,
-  SYSVAR_RENT,
-} from './constants';
-import { fetchGlobalState, getPriorityFees } from './utils';
-import { estimatePumpfunMinTokensOut } from './bondingCurve';
-
-// Custom type of reponse from calling pumpfunBuy
-export type SwapResponse = {
-  sucess: boolean;
-  message?: string;
-  data?: Object;
-};
-
-// global.__GILL_DEBUG__ = true;
-// global.__GILL_DEBUG_LEVEL__ = 'debug';
+import { estimatePumpswapMinTokensOut } from '../pool';
+import { getPriorityFees } from '../../helpers/helpers';
+import { PUMPSWAP_PROGRAM_ID } from '../constants';
 
 /**
- * Buys a token from pumpfun with a given sol amount and a slippage tolerance
- * @param {string} mint
- * @param {number} solAmount
- * @param {number} slippage
- * @param {KeyPairSigner} signer
- * @param {any} connection
- * @param {string?} rpcUrl?
- * @param {number?} computeUnitLimit
- * @param {number?} computeUnitPrice
- * @returns
+ * Buys from PumpSwap after a token graduates
  */
-export const pumpfunBuy = async (
+export const pumpswapBuy = async (
   mint: string,
   solAmount: number,
   slippage: number,
@@ -58,8 +33,6 @@ export const pumpfunBuy = async (
   computeUnitLimit?: number,
   computeUnitPrice?: number
 ) => {
-  // console.log(`Buying tokens with ${solAmount} SOL and ${slippage * 100}% slippage`);
-
   // Validate inputs
   if (solAmount <= 0) {
     return {
@@ -88,7 +61,6 @@ export const pumpfunBuy = async (
 
   // Get latest blockhash
   const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
-
   // Get the user's ATA for the token
   const userAta = await getAssociatedTokenAccountAddress(
     mintAddress,
@@ -110,73 +82,92 @@ export const pumpfunBuy = async (
   const solAmountLamports = solAmount * 1e9;
 
   // Calculate token output with slippage
-  const { success, message, bondingCurveData, estimatedAmountOut, minimumAmountOut } =
-    await estimatePumpfunMinTokensOut(mintAddress, connection, solAmountLamports, slippage);
+  const { success, message, poolData, estimatedAmountOut, minimumAmountOut } =
+    await estimatePumpswapMinTokensOut(mintAddress, connection, solAmountLamports, slippage);
 
   if (!success) {
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
-    return { success, message, data: bondingCurveData };
+    return { success, message, data: poolData };
   }
 
   // Format the instruction data
-  const data: Uint8Array = formatPumpfunBuyData(minimumAmountOut, solAmountLamports);
+  let data: Uint8Array = formatPumpswapBuyData(0, 0);
 
   // Create the buy instruction
   const buyTokenIx: IInstruction = {
-    programAddress: address(PUMPFUN_PROGRAM_ID),
+    programAddress: address(PUMPSWAP_PROGRAM_ID),
     accounts: [
       {
-        address: address(PUMPFUN_GLOBAL), // global address
+        address: address('GV7wvKpGPaZnv8tVLtAjyyPJbhreG4zpRcQXnFDqsBxh'), // Pool
         role: AccountRole.READONLY,
       },
       {
-        address: await fetchGlobalState(connection), // Pump fun fee recipient
-        role: AccountRole.WRITABLE,
-      },
-      {
-        address: mintAddress, // Target mint token
-        role: AccountRole.READONLY,
-      },
-      {
-        address: address(bondingCurveData.address), // Bonding curve
-        role: AccountRole.WRITABLE,
-      },
-      {
-        address: address(bondingCurveData.ata), // Bonding curve ATA
-        role: AccountRole.WRITABLE,
-      },
-      {
-        address: address(userAta), // User ATA
-        role: AccountRole.WRITABLE,
-      },
-      {
-        address: signer.address, // User/signer
+        address: signer.address, // User
         role: AccountRole.WRITABLE_SIGNER,
       },
       {
-        address: address(SYSTEM_PROGRAM_ADDRESS), // System program
+        address: address('ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw'), // global_config
         role: AccountRole.READONLY,
       },
       {
-        address: address(TOKEN_PROGRAM_ADDRESS), // Token program
+        address: address('7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'), // base_mint
         role: AccountRole.READONLY,
       },
       {
-        address: address(SYSVAR_RENT), // Sysvar Rent
+        address: address('So11111111111111111111111111111111111111112'), // quote_mint
         role: AccountRole.READONLY,
       },
       {
-        address: address(PUMPFUN_EVENT_AUTHORITY), // Event authority
+        address: address('2hvvCc3CzZD5rFdmdxZUbaegZYtzAP6Mu1oJAK9PjZrd'), // user_base_token_account
+        role: AccountRole.WRITABLE,
+      },
+      {
+        address: address('5N9Xb3iV7bgoZqWQXq9YNRqbcjooFcVrDHYXYhbrL3Cf'), // user_quote_token_account
+        role: AccountRole.WRITABLE,
+      },
+      {
+        address: address('CwWSm2bvyVUKro6HoNCeKwhxnsKKofF2zosDPoZNYXrH'), // pool_base_token_account
+        role: AccountRole.WRITABLE,
+      },
+      {
+        address: address('DSSZJPJgnW6HvVC7aqsuGXm7oEPJ9rVWAw1YCUKS35h7'), // pool_quote_token_account
+        role: AccountRole.WRITABLE,
+      },
+      {
+        address: address('JCRGumoE9Qi5BBgULTgdgTLjSgkCMSbF62ZZfGs84JeU'), // protocol_fee_recipient
         role: AccountRole.READONLY,
       },
       {
-        address: address(PUMPFUN_PROGRAM_ID), // Pumpfun program id
+        address: address('DWpvfqzGWuVy9jVSKSShdM2733nrEsnnhsUStYbkj6Nn'), // protocol_fee_recipient_token_account
+        role: AccountRole.WRITABLE,
+      },
+      {
+        address: address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), // base_token_program
+        role: AccountRole.READONLY,
+      },
+      {
+        address: address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), // quote_token_program
+        role: AccountRole.READONLY,
+      },
+      {
+        address: address(SYSTEM_PROGRAM_ADDRESS), // system_program
+        role: AccountRole.READONLY,
+      },
+      {
+        address: address(ASSOCIATED_TOKEN_PROGRAM_ADDRESS), // associated_token_program
+        role: AccountRole.READONLY,
+      },
+      {
+        address: address('GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR'), // event_authority
+        role: AccountRole.READONLY,
+      },
+      {
+        address: address(PUMPSWAP_PROGRAM_ID), // program_id
         role: AccountRole.READONLY,
       },
     ],
     data,
   };
-
   let tx, signedTransaction;
 
   // Creates a transaction that will use the Helius api to get the estimated priority fee
@@ -225,23 +216,23 @@ export const pumpfunBuy = async (
 
   console.log('| BUY | Transaction Explorer Link:\n', explorerLink);
 
-  // Send and confirm the transaction or return the error
-  try {
-    const signature = await connection.sendAndConfirmTransaction(signedTransaction);
-    return {
-      success: true,
-      data: {
-        signature,
-        explorerLink,
-      },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: 'There was an error with the sendAndConfirmTransaction',
-      data: { error, explorerLink },
-    };
-  }
+  //   // Send and confirm the transaction or return the error
+  //   try {
+  //     const signature = await connection.sendAndConfirmTransaction(signedTransaction);
+  //     return {
+  //       success: true,
+  //       data: {
+  //         signature,
+  //         explorerLink,
+  //       },
+  //     };
+  //   } catch (error) {
+  //     return {
+  //       success: false,
+  //       message: 'There was an error with the sendAndConfirmTransaction',
+  //       data: { error, explorerLink },
+  //     };
+  //   }
 };
 
 /**
@@ -249,7 +240,7 @@ export const pumpfunBuy = async (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpfunBuyData(minTokenAmount: number, maxSolToSpend: number) {
+export function formatPumpswapBuyData(baseAmountOut: number, maxQuoteAmountIn: number) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
@@ -257,8 +248,8 @@ export function formatPumpfunBuyData(minTokenAmount: number, maxSolToSpend: numb
   dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
-  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
+  dataBuffer.writeBigUInt64LE(BigInt(baseAmountOut), 8);
+  dataBuffer.writeBigInt64LE(BigInt(maxQuoteAmountIn), 16);
 
   return new Uint8Array(dataBuffer);
 }

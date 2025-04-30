@@ -2,15 +2,21 @@ import dotenv from 'dotenv';
 import { address, createSolanaClient, KeyPairSigner } from 'gill';
 import { loadKeypairSignerFromFile } from 'gill/node';
 
-import { pumpfunBuy } from './src/buy';
-import { pumpfunSell } from './src/sell';
-import { getBondingCurveData, getPumpfunPrice } from './src/bondingCurve';
-import { fetchGlobalState } from './src/utils';
+import { pumpfunBuy } from './src/pump/pumpfun/pumpfunBuy';
+import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
+import { getBondingCurveData, getPumpfunPrice } from './src/pump/bondingCurve';
+import { fetchGlobalState } from './src/pump/utils';
+import { pumpswapBuy } from './src/pump/pumpswap/pumswapBuy';
 dotenv.config();
 
 async function main() {
   // target mint address hardcoded for testing
-  const mint = 'BuWEZfRc1vQFhTf7dVUeaia62ZTe6g9rSo1vkBqipump';
+
+  // Bonding Curve token
+  //const mint = 'BuWEZfRc1vQFhTf7dVUeaia62ZTe6g9rSo1vkBqipump';
+
+  // PumpSwap token
+  const mint = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump';
 
   // Creates connection to Solana
   const connection = createSolanaClient({
@@ -28,7 +34,7 @@ async function main() {
   // const fee = await fetchGlobalState(connection);
   // console.log(fee);
 
-  // // Test the buy
+  // // Test PumpFun buy
   // const response = await pumpfunBuy(
   //   mint,
   //   solAmount,
@@ -38,15 +44,27 @@ async function main() {
   //   process.env.HELIUS_URL?.toString()
   // );
 
-  //Test the sell
-  const response = await pumpfunSell(
-    mint,
-    tokenAmount,
-    slippage,
-    signer,
-    connection,
-    process.env.HELIUS_URL?.toString()
-  );
+  //Test PumpFun sell
+  // const response = await pumpfunSell(
+  //   mint,
+  //   tokenAmount,
+  //   slippage,
+  //   signer,
+  //   connection,
+  //   process.env.HELIUS_URL?.toString()
+  // );
+
+  // Test PumpSwap buy
+  // const response = await pumpswapBuy(
+  //   mint,
+  //   solAmount,
+  //   slippage,
+  //   signer,
+  //   connection,
+  //   process.env.HELIUS_URL?.toString()
+  // );
+
+  const response = await getBondingCurveData(address(mint), connection);
 
   console.log('Buy transaction response', response);
 }

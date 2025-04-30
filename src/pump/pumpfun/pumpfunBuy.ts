@@ -10,7 +10,6 @@ import {
 } from 'gill';
 import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
   TOKEN_PROGRAM_ADDRESS,
@@ -19,15 +18,15 @@ import {
 // Local Imports
 import {
   PUMPFUN_EVENT_AUTHORITY,
-  PUMPFUN_FEE_RECIPIENT,
   PUMPFUN_GLOBAL,
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
-} from './constants';
-import { fetchGlobalState, getPriorityFees } from './utils';
-import { estimatePumpfunMinSolOut, estimatePumpfunMinTokensOut } from './bondingCurve';
+} from '../constants';
+import { fetchGlobalState } from '../utils';
+import { estimatePumpfunMinTokensOut } from '../bondingCurve';
+import { getPriorityFees } from '../../helpers/helpers';
 
-// Custom type of reponse from calling pumpfunSell
+// Custom type of reponse from calling pumpfunBuy
 export type SwapResponse = {
   sucess: boolean;
   message?: string;
@@ -38,9 +37,9 @@ export type SwapResponse = {
 // global.__GILL_DEBUG_LEVEL__ = 'debug';
 
 /**
- * Sells a token from pumpfun with a given sol amount and a slippage tolerance
+ * Buys a token from pumpfun with a given sol amount and a slippage tolerance
  * @param {string} mint
- * @param {number} tokenAmount
+ * @param {number} solAmount
  * @param {number} slippage
  * @param {KeyPairSigner} signer
  * @param {any} connection
@@ -49,9 +48,9 @@ export type SwapResponse = {
  * @param {number?} computeUnitPrice
  * @returns
  */
-export const pumpfunSell = async (
+export const pumpfunBuy = async (
   mint: string,
-  tokenAmount: number,
+  solAmount: number,
   slippage: number,
   signer: KeyPairSigner,
   connection: any,
@@ -59,13 +58,13 @@ export const pumpfunSell = async (
   computeUnitLimit?: number,
   computeUnitPrice?: number
 ) => {
-  // console.log(`Selling tokens with ${tokenAmount} SOL and ${slippage * 100}% slippage`);
+  // console.log(`Buying tokens with ${solAmount} SOL and ${slippage * 100}% slippage`);
 
   // Validate inputs
-  if (tokenAmount <= 0) {
+  if (solAmount <= 0) {
     return {
       success: false,
-      message: 'Error: tokenAmount must be greater than zero',
+      message: 'Error: solAmount must be greater than zero',
     };
   }
 
@@ -108,11 +107,11 @@ export const pumpfunSell = async (
   });
 
   // Convert SOL to lamports
-  const tokenAmountInDecimals = tokenAmount * 1e6;
+  const solAmountLamports = solAmount * 1e9;
 
   // Calculate token output with slippage
   const { success, message, bondingCurveData, estimatedAmountOut, minimumAmountOut } =
-    await estimatePumpfunMinSolOut(mintAddress, connection, tokenAmountInDecimals, slippage);
+    await estimatePumpfunMinTokensOut(mintAddress, connection, solAmountLamports, slippage);
 
   if (!success) {
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
@@ -120,10 +119,10 @@ export const pumpfunSell = async (
   }
 
   // Format the instruction data
-  const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, tokenAmountInDecimals);
+  const data: Uint8Array = formatPumpfunBuyData(minimumAmountOut, solAmountLamports);
 
-  // Create the Sell instruction
-  const sellTokenIx: IInstruction = {
+  // Create the buy instruction
+  const buyTokenIx: IInstruction = {
     programAddress: address(PUMPFUN_PROGRAM_ID),
     accounts: [
       {
@@ -159,11 +158,11 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(ASSOCIATED_TOKEN_PROGRAM_ADDRESS), // Associate Token Program
+        address: address(TOKEN_PROGRAM_ADDRESS), // Token program
         role: AccountRole.READONLY,
       },
       {
-        address: address(TOKEN_PROGRAM_ADDRESS), // Token program
+        address: address(SYSVAR_RENT), // Sysvar Rent
         role: AccountRole.READONLY,
       },
       {
@@ -185,7 +184,7 @@ export const pumpfunSell = async (
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
-      instructions: [userAtaIx, sellTokenIx],
+      instructions: [userAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
     });
@@ -200,7 +199,7 @@ export const pumpfunSell = async (
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
-      instructions: [userAtaIx, sellTokenIx],
+      instructions: [userAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
       computeUnitPrice: priorityFeeEstimate,
@@ -210,7 +209,7 @@ export const pumpfunSell = async (
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
-      instructions: [userAtaIx, sellTokenIx],
+      instructions: [userAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
       computeUnitPrice,
@@ -224,7 +223,7 @@ export const pumpfunSell = async (
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log('| SELL | Transaction Explorer Link:\n', explorerLink);
+  console.log('| BUY | Transaction Explorer Link:\n', explorerLink);
 
   // Send and confirm the transaction or return the error
   try {
@@ -246,19 +245,20 @@ export const pumpfunSell = async (
 };
 
 /**
- * Format the data for the sell instruction
+ * Format the data for the buy instruction
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpfunSellData(minSolAmount: number, maxTokensToSpend: number) {
+export function formatPumpfunBuyData(minTokenAmount: number, maxSolToSpend: number) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
-  // Write the discriminator for the 'sell' instruction
-  dataBuffer.write('33e685a4017f83ad', 'hex'); // Anchor discriminator for 'buy'
+  // Write the discriminator for the 'buy' instruction
+  dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(maxTokensToSpend), 8); // amount to sell
-  dataBuffer.writeBigInt64LE(BigInt(minSolAmount), 16);
+  dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
+  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
+
   return new Uint8Array(dataBuffer);
 }
