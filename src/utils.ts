@@ -1,77 +1,20 @@
-import {
-  FullySignedTransaction,
-  getBase64EncodedWireTransaction,
-  Transaction,
-} from "gill";
+import { address, getBase64EncodedWireTransaction, getProgramDerivedAddress } from 'gill';
+import { PUMPFUN_PROGRAM_ID } from './constants';
+import bs58 from 'bs58';
 
-interface HeliusPriorityFeeResponse {
-  jsonrpc: string;
-  result: {
-    priorityFeeEstimate: number;
-  };
-  id: string;
-}
-
-/**
- * Bonding curve decoding function with detailed debugging
- * @param {Buffer} buffer The binary buffer containing the account data
- */
-export const decodeBondingCurveAccount = (buffer: Buffer) => {
-  if (buffer.length < 49) {
-    console.error("Buffer too small for bonding curve data:", buffer.length);
-    throw new Error("Buffer too small to contain bonding curve data");
-  }
-
-  // First 8 bytes are the Anchor discriminator
-  const discriminator = buffer.slice(0, 8);
-
-  // Read the u64 fields (8 bytes each, little-endian)
-  const virtualTokenReserves = buffer.readBigUInt64LE(8);
-  const virtualSolReserves = buffer.readBigUInt64LE(16);
-  const realTokenReserves = buffer.readBigUInt64LE(24);
-  const realSolReserves = buffer.readBigUInt64LE(32);
-  const tokenTotalSupply = buffer.readBigUInt64LE(40);
-
-  // Boolean field (1 byte)
-  const complete = buffer[48] === 1;
-
-  // Log the values for debugging
-  // console.log('=== Bonding Curve Raw Values ===');
-  // console.log('Discriminator (hex):', discriminator.toString('hex'));
-  // console.log('virtualTokenReserves:', virtualTokenReserves.toString());
-  // console.log('virtualSolReserves:', virtualSolReserves.toString());
-  // console.log('realTokenReserves:', realTokenReserves.toString());
-  // console.log('realSolReserves:', realSolReserves.toString());
-  // console.log('tokenTotalSupply:', tokenTotalSupply.toString());
-  // console.log('complete:', complete);
-
-  return {
-    discriminator: discriminator.toString("hex"),
-    virtualTokenReserves,
-    virtualSolReserves,
-    realTokenReserves,
-    realSolReserves,
-    tokenTotalSupply,
-    complete,
-  };
-};
-
-export const getPriorityFees = async (
-  rpcUrl: string,
-  signedTransaction: any
-) => {
+export const getPriorityFees = async (rpcUrl: string, signedTransaction: any) => {
   const priorityFeeResponse = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: "helius-priority-fee",
-      method: "getPriorityFeeEstimate",
+      jsonrpc: '2.0',
+      id: 'helius-priority-fee',
+      method: 'getPriorityFeeEstimate',
       params: [
         {
           transaction: getBase64EncodedWireTransaction(signedTransaction),
           options: {
-            transactionEncoding: "base64",
+            transactionEncoding: 'base64',
             recommended: true,
           },
         },
@@ -81,12 +24,37 @@ export const getPriorityFees = async (
   try {
     const response: any = await priorityFeeResponse.json();
     if (!response) {
-      throw new Error(
-        "Something went wrong with getting compute unit price estimate from Helius"
-      );
+      throw new Error('Something went wrong with getting compute unit price estimate from Helius');
     }
     return response.result.priorityFeeEstimate;
   } catch (error) {
-    throw new Error("Helius priority fee call failed");
+    throw new Error('Helius priority fee call failed');
   }
 };
+
+export async function fetchGlobalState(connection: any) {
+  // Get the global account address
+  const [globalAddress] = await getProgramDerivedAddress({
+    seeds: ['global'],
+    programAddress: address(PUMPFUN_PROGRAM_ID),
+  });
+
+  // Fetch the account data
+  const accountInfo = await connection.rpc
+    .getAccountInfo(globalAddress, {
+      encoding: 'base64',
+    })
+    .send();
+
+  const base64Data = accountInfo.value.data[0];
+  const dataBuffer = Buffer.from(base64Data, 'base64');
+  // Extract the fee recipient bytes (32 bytes)
+  const feeRecipientBytes = dataBuffer.slice(41, 73);
+
+  // Convert bytes to base58 string format
+  // This is how Solana addresses are normally represented
+  const feeRecipientString = bs58.encode(feeRecipientBytes);
+
+  // Use gill's address function to convert the string to its address type
+  return address(feeRecipientString);
+}
