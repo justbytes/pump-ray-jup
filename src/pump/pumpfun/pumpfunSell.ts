@@ -18,8 +18,8 @@ import {
 
 // Local Imports
 import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../constants';
-import { fetchGlobalState } from '../utils';
-import { estimatePumpfunMinSolOut } from '../bondingCurve';
+import { getGlobalData } from './pumpfunGlobal';
+import { estimatePumpfunMinSolOut } from './pumpfunBondingCurve';
 import { getPriorityFees } from '../../helpers/helpers';
 
 // Custom type of reponse from calling pumpfunSell
@@ -102,6 +102,8 @@ export const pumpfunSell = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
+  const globalData = await getGlobalData(connection);
+
   // Convert SOL to lamports
   const tokenAmountInDecimals = tokenAmount * 1e6;
 
@@ -126,7 +128,7 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
       {
-        address: await fetchGlobalState(connection), // Pump fun fee recipient
+        address: address(globalData.feeRecipient.toString()), // Pump fun fee recipient
         role: AccountRole.WRITABLE,
       },
       {

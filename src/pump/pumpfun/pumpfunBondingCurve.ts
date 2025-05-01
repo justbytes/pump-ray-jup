@@ -5,7 +5,7 @@ import {
   getProgramDerivedAddress,
   LAMPORTS_PER_SOL,
 } from 'gill';
-import { PUMPFUN_PROGRAM_ID } from './constants';
+import { PUMPFUN_PROGRAM_ID } from '../constants';
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from 'gill/programs/token';
 
 /**

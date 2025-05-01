@@ -1,53 +1,61 @@
 import dotenv from 'dotenv';
-import { address, createSolanaClient, KeyPairSigner } from 'gill';
+import {
+  Address,
+  address,
+  createSolanaClient,
+  createSolanaRpc,
+  KeyPairSigner,
+  SolanaClient,
+} from 'gill';
 import { loadKeypairSignerFromFile } from 'gill/node';
 
 import { pumpfunBuy } from './src/pump/pumpfun/pumpfunBuy';
 import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
-import { getBondingCurveData, getPumpfunPrice } from './src/pump/bondingCurve';
-import { fetchGlobalState, getGlobalConfigPda } from './src/pump/utils';
+import { getBondingCurveData, getPumpfunPrice } from './src/pump/pumpfun/pumpfunBondingCurve';
+
 import { pumpswapBuy } from './src/pump/pumpswap/pumswapBuy';
-import { getPumpPoolPda, getPumpPoolAuthorityPda, getPumpPoolData } from './src/pump/pool';
+import {
+  getPumpPoolPda,
+  getPumpPoolAuthorityPda,
+  getPumpPoolData,
+} from './src/pump/pumpswap/pumpswapPool';
+import {
+  fetchMint,
+  getAssociatedTokenAccountAddress,
+  TOKEN_PROGRAM_ADDRESS,
+} from 'gill/programs/token';
+import { getGlobalData } from './src/pump/pumpfun/pumpfunGlobal';
 dotenv.config();
 
 async function main() {
-  // target mint address hardcoded for testing
-
-  // Bonding Curve token
-  //const mint = 'BuWEZfRc1vQFhTf7dVUeaia62ZTe6g9rSo1vkBqipump';
-
-  // PumpSwap token
-  const mint = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump';
+  const slippage = 0.01; // 1% slippage
+  const solAmount = 0.0001; // Buy 0.0001 sol worth
+  const tokenAmount = 3300;
 
   // Creates connection to Solana
-  const connection = createSolanaClient({
+  const connection: SolanaClient<string> = createSolanaClient({
     urlOrMoniker: `${process.env.HELIUS_URL}`,
   });
 
   // Load signer from config
   const signer: KeyPairSigner = await loadKeypairSignerFromFile();
 
-  // For testing
-  const slippage = 0.01; // 1% slippage
-  const solAmount = 0.0001; // Buy 0.0001 sol worth
-  const tokenAmount = 10000;
-
-  // const fee = await fetchGlobalState(connection);
-  // console.log(fee);
+  const testBondingCurveMintAddress = 'BuWEZfRc1vQFhTf7dVUeaia62ZTe6g9rSo1vkBqipump';
 
   // // Test PumpFun buy
-  // const response = await pumpfunBuy(
-  //   mint,
+  // let response = await pumpfunBuy(
+  //   testBondingCurveMintAddress,
   //   solAmount,
   //   slippage,
   //   signer,
   //   connection,
   //   process.env.HELIUS_URL?.toString()
   // );
+  // console.log('Buy transaction response', response);
 
-  //Test PumpFun sell
-  // const response = await pumpfunSell(
-  //   mint,
+  // // Test PumpFun sell
+  // response = await pumpfunSell(
+  //   testBondingCurveMintAddress,
   //   tokenAmount,
   //   slippage,
   //   signer,
@@ -55,8 +63,13 @@ async function main() {
   //   process.env.HELIUS_URL?.toString()
   // );
 
-  // Test PumpSwap buy
-  // const response = await pumpswapBuy(
+  // console.log('Sell transaction response', response);
+
+  const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
+  const base = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'; // PumpSwap token to recieve
+
+  // // Test PumpSwap buy
+  // let response = await pumpswapBuy(
   //   mint,
   //   solAmount,
   //   slippage,
@@ -64,24 +77,7 @@ async function main() {
   //   connection,
   //   process.env.HELIUS_URL?.toString()
   // );
-
-  // const auth = await getPumpPoolAuthorityPda(address(mint));
-
-  // const response = await getPumpPoolPda(
-  //   auth,
-  //   address(mint),
-  //   address('So11111111111111111111111111111111111111112')
-  // );
-
-  // console.log(auth);
-
-  const response = await getPumpPoolData(
-    address(mint),
-    address('So11111111111111111111111111111111111111112'),
-    connection
-  );
-
-  console.log('Buy transaction response', response);
+  // console.log('Buy transaction response', response);
 }
 
 main();
