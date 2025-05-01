@@ -14,6 +14,7 @@
   "type": "module",
   "packageManager": "pnpm@10.6.4",
   "dependencies": {
+    "@coral-xyz/borsh": "^0.31.1",
     "bn.js": "^5.2.2",
     "bs58": "^6.0.0",
     "dotenv": "^16.5.0",
@@ -21,6 +22,7 @@
     "gill": "^0.8.3"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.1.6",
     "@types/node": "^22.15.2",
     "esbuild": "^0.25.3",
     "typescript": "^5.8.3"

@@ -18,8 +18,9 @@ import {
 
 // Local Imports
 import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../constants';
-import { fetchGlobalState, getPriorityFees } from '../utils';
+import { fetchGlobalState } from '../utils';
 import { estimatePumpfunMinSolOut } from '../bondingCurve';
+import { getPriorityFees } from '../../helpers/helpers';
 
 // Custom type of reponse from calling pumpfunSell
 export type SwapResponse = {
