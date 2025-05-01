@@ -22,8 +22,8 @@ import {
   PUMPFUN_PROGRAM_ID,
   SYSVAR_RENT,
 } from '../constants';
-import { fetchGlobalState } from '../utils';
-import { estimatePumpfunMinTokensOut } from '../bondingCurve';
+import { getGlobalData } from './pumpfunGlobal';
+import { estimatePumpfunMinTokensOut } from './pumpfunBondingCurve';
 import { getPriorityFees } from '../../helpers/helpers';
 
 // Custom type of reponse from calling pumpfunBuy
@@ -89,6 +89,8 @@ export const pumpfunBuy = async (
   // Get latest blockhash
   const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
 
+  console.log(latestBlockhash);
+
   // Get the user's ATA for the token
   const userAta = await getAssociatedTokenAccountAddress(
     mintAddress,
@@ -105,6 +107,8 @@ export const pumpfunBuy = async (
     systemProgram: SYSTEM_PROGRAM_ADDRESS,
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
+
+  const globalData = await getGlobalData(connection);
 
   // Convert SOL to lamports
   const solAmountLamports = solAmount * 1e9;
@@ -130,7 +134,7 @@ export const pumpfunBuy = async (
         role: AccountRole.READONLY,
       },
       {
-        address: await fetchGlobalState(connection), // Pump fun fee recipient
+        address: address(globalData.feeRecipient.toString()), // Pump fun fee recipient
         role: AccountRole.WRITABLE,
       },
       {

@@ -11,22 +11,24 @@ import {
 import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
+  fetchMint,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from 'gill/programs/token';
 
-import { estimatePumpswapMinTokensOut } from '../pool';
+import { estimatePumpswapBaseAmountOut } from './pumpswapPool';
 import { getPriorityFees } from '../../helpers/helpers';
 import { PUMPSWAP_PROGRAM_ID } from '../constants';
-import { getGlobalConfigPda } from '../utils';
+import { getGlobalConfigPda, getGlobalData } from '../pumpfun/pumpfunGlobal';
 
 /**
  * Buys from PumpSwap after a token graduates
  */
 export const pumpswapBuy = async (
-  mint: string,
-  solAmount: number,
+  baseMint: string, // buying
+  quoteMint: string, // paying with
+  quoteAmount: number,
   slippage: number,
   signer: KeyPairSigner,
   connection: any,
@@ -34,11 +36,14 @@ export const pumpswapBuy = async (
   computeUnitLimit?: number,
   computeUnitPrice?: number
 ) => {
+  let quoteDecimals, quoteTokenProgram;
+  let baseDecimals, baseTokenProgram;
+
   // Validate inputs
-  if (solAmount <= 0) {
+  if (quoteAmount <= 0) {
     return {
       success: false,
-      message: 'Error: solAmount must be greater than zero',
+      message: 'Error: quoteAmount must be greater than zero',
     };
   }
 
@@ -57,37 +62,74 @@ export const pumpswapBuy = async (
     };
   }
 
+  const quoteMintAccountData = await fetchMint(connection.rpc, address(quoteMint));
+  quoteDecimals = quoteMintAccountData.data.decimals;
+  quoteTokenProgram = quoteMintAccountData.programAddress;
+
+  const baseMintAccountData = await fetchMint(connection.rpc, address(baseMint));
+  baseDecimals = baseMintAccountData.data.decimals;
+  baseTokenProgram = baseMintAccountData.programAddress;
+
   // Convert the mint address to type address
-  const mintAddress = address(mint);
+  const baseMintAddress = address(baseMint);
+  const quoteMintAddress = address(quoteMint);
 
   // Get latest blockhash
   const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
-  // Get the user's ATA for the token
-  const userAta = await getAssociatedTokenAccountAddress(
-    mintAddress,
+  // Get the user's ATA for the base mint
+  const userBaseAta = await getAssociatedTokenAccountAddress(
+    baseMintAddress,
     signer.address,
     TOKEN_PROGRAM_ADDRESS
   );
 
+  console.log(userBaseAta);
+
   // Instruction to create the user's ATA
-  const userAtaIx = getCreateAssociatedTokenIdempotentInstruction({
-    mint: mintAddress,
+  const userBaseAtaIx = getCreateAssociatedTokenIdempotentInstruction({
+    mint: baseMintAddress,
     owner: signer.address,
     payer: signer,
-    ata: userAta,
+    ata: userBaseAta,
     systemProgram: SYSTEM_PROGRAM_ADDRESS,
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
-  // Convert SOL to lamports
-  const solAmountLamports = solAmount * 1e9;
+  // Get the user's ATA for the token
+  const userQuoteAta = await getAssociatedTokenAccountAddress(
+    baseMintAddress,
+    signer.address,
+    TOKEN_PROGRAM_ADDRESS
+  );
 
-  // ge
-  // Get pool data
+  console.log(userQuoteAta);
+
+  // Instruction to create the user's ATA
+  const userQuoteAtaIx = getCreateAssociatedTokenIdempotentInstruction({
+    mint: quoteMintAddress,
+    owner: signer.address,
+    payer: signer,
+    ata: userQuoteAta,
+    systemProgram: SYSTEM_PROGRAM_ADDRESS,
+    tokenProgram: TOKEN_PROGRAM_ADDRESS,
+  });
+
+  const globalData = await getGlobalData(connection);
+
+  // Multiply buy the quote decimals
+  quoteAmount = quoteAmount * 10 ** quoteDecimals;
 
   // Calculate token output with slippage
-  const { success, message, poolData, estimatedAmountOut, minimumAmountOut } =
-    await estimatePumpswapMinTokensOut(mintAddress, connection, solAmountLamports, slippage);
+  const { success, message, poolData, estimatedBaseAmountOut, minimumBaseAmountOut } =
+    await estimatePumpswapBaseAmountOut(
+      connection,
+      baseMintAddress,
+      quoteMintAddress,
+      quoteAmount,
+      slippage
+    );
+
+  console.log('EST: ', estimatedBaseAmountOut);
 
   if (!success) {
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
@@ -95,7 +137,7 @@ export const pumpswapBuy = async (
   }
 
   // Format the instruction data
-  let data: Uint8Array = formatPumpswapBuyData(0, 0);
+  let data: Uint8Array = formatPumpswapBuyData(minimumAmountOut, quoteAmount);
 
   // Create the buy instruction
   const buyTokenIx: IInstruction = {
@@ -114,19 +156,19 @@ export const pumpswapBuy = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address('7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'), // base_mint
+        address: baseMintAddress, // base_mint
         role: AccountRole.READONLY,
       },
       {
-        address: address('So11111111111111111111111111111111111111112'), // quote_mint
+        address: quoteMintAddress, // quote_mint
         role: AccountRole.READONLY,
       },
       {
-        address: address('2hvvCc3CzZD5rFdmdxZUbaegZYtzAP6Mu1oJAK9PjZrd'), // user_base_token_account
+        address: address(userBaseAta), // user_base_token_account
         role: AccountRole.WRITABLE,
       },
       {
-        address: address('5N9Xb3iV7bgoZqWQXq9YNRqbcjooFcVrDHYXYhbrL3Cf'), // user_quote_token_account
+        address: address(userQuoteAta), // user_quote_token_account
         role: AccountRole.WRITABLE,
       },
       {
@@ -146,11 +188,11 @@ export const pumpswapBuy = async (
         role: AccountRole.WRITABLE,
       },
       {
-        address: address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), // base_token_program
+        address: address(baseTokenProgram), // base_token_program
         role: AccountRole.READONLY,
       },
       {
-        address: address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'), // quote_token_program
+        address: address(quoteTokenProgram), // quote_token_program
         role: AccountRole.READONLY,
       },
       {
@@ -179,7 +221,7 @@ export const pumpswapBuy = async (
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
-      instructions: [userAtaIx, buyTokenIx],
+      instructions: [userBaseAtaIx, userQuoteAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
     });
@@ -194,7 +236,7 @@ export const pumpswapBuy = async (
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
-      instructions: [userAtaIx, buyTokenIx],
+      instructions: [userBaseAtaIx, userQuoteAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
       computeUnitPrice: priorityFeeEstimate,
@@ -204,7 +246,7 @@ export const pumpswapBuy = async (
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
-      instructions: [userAtaIx, buyTokenIx],
+      instructions: [userBaseAtaIx, userQuoteAtaIx, buyTokenIx],
       latestBlockhash,
       computeUnitLimit,
       computeUnitPrice,
@@ -244,7 +286,7 @@ export const pumpswapBuy = async (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpswapBuyData(baseAmountOut: number, maxQuoteAmountIn: number) {
+export function formatPumpswapBuyData(minBaseAmountOut: number, maxQuoteAmountIn: number) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
@@ -252,7 +294,7 @@ export function formatPumpswapBuyData(baseAmountOut: number, maxQuoteAmountIn: n
   dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(baseAmountOut), 8);
+  dataBuffer.writeBigUInt64LE(BigInt(minBaseAmountOut), 8);
   dataBuffer.writeBigInt64LE(BigInt(maxQuoteAmountIn), 16);
 
   return new Uint8Array(dataBuffer);

@@ -1,6 +1,6 @@
 import * as borsh from '@coral-xyz/borsh';
 import { address, Address, getAddressEncoder, getProgramDerivedAddress } from 'gill';
-import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from './constants';
+import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../constants';
 import BN from 'bn.js';
 
 export const CANONICAL_POOL_INDEX = 0;
@@ -14,7 +14,7 @@ export const poolDataSchema = borsh.struct([
   borsh.publicKey('base_mint'),
   borsh.publicKey('quote_mint'),
   borsh.publicKey('lp_mint'),
-  borsh.publicKey('popool_base_token_accounto'),
+  borsh.publicKey('pool_base_token_account'),
   borsh.publicKey('pool_quote_token_account'),
   borsh.u64('lp_supply'),
 ]);
@@ -58,19 +58,24 @@ export const getPumpPoolData = async (baseMint: Address, quoteMint: Address, con
   const base64Data = pumpPoolAccountInfo.value.data[0];
   const dataBuffer = Buffer.from(base64Data, 'base64');
 
-  return poolDataSchema.decode(dataBuffer);
+  const data = poolDataSchema.decode(dataBuffer);
+
+  return { pumpPoolPda, ...data };
 };
 
-export const estimatePumpswapMinTokensOut = (
-  mint: Address,
+export const estimatePumpswapBaseAmountOut = async (
   connection: any,
-  solAmount: number,
+  baseMint: Address,
+  quoteMint: Address,
+  quoteAmount: number,
   slippage: number
 ) => {
-  let success, message, poolData, estimatedAmountOut, minimumAmountOut;
+  const pumpPoolData = await getPumpPoolData(baseMint, quoteMint, connection);
+
+  let success, message, poolData, estimatedBaseAmountOut, minimumBaseAmountOut;
 
   // TOD Calculate the amounts out for the given input
-  return { success, message, poolData, estimatedAmountOut, minimumAmountOut };
+  return { success, message, poolData, estimatedBaseAmountOut, minimumBaseAmountOut };
 };
 
 export const estimatePumpswapMinSolOut = () => {};
