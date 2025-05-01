@@ -7,7 +7,7 @@ import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
 import { getBondingCurveData, getPumpfunPrice } from './src/pump/bondingCurve';
 import { fetchGlobalState, getGlobalConfigPda } from './src/pump/utils';
 import { pumpswapBuy } from './src/pump/pumpswap/pumswapBuy';
-import { getPoolPda, getPoolData, getPumpPoolAuthorityPda } from './src/pump/pool';
+import { getPumpPoolPda, getPumpPoolAuthorityPda, getPumpPoolData } from './src/pump/pool';
 dotenv.config();
 
 async function main() {
@@ -65,15 +65,21 @@ async function main() {
   //   process.env.HELIUS_URL?.toString()
   // );
 
-  const auth = await getPumpPoolAuthorityPda(address(mint));
+  // const auth = await getPumpPoolAuthorityPda(address(mint));
 
-  const response = await getPoolPda(
-    auth,
+  // const response = await getPumpPoolPda(
+  //   auth,
+  //   address(mint),
+  //   address('So11111111111111111111111111111111111111112')
+  // );
+
+  // console.log(auth);
+
+  const response = await getPumpPoolData(
     address(mint),
-    address('So11111111111111111111111111111111111111112')
+    address('So11111111111111111111111111111111111111112'),
+    connection
   );
-
-  console.log(auth);
 
   console.log('Buy transaction response', response);
 }
