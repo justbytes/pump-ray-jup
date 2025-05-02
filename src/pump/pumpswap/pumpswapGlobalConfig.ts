@@ -42,7 +42,7 @@ export async function getGlobalConfigData(connection: any) {
   const globalConfigPda = await getGlobalConfigPda();
 
   const globalConfigAccountInfo = await connection.rpc
-    .getAccountInfo(getGlobalConfigPda(), { encoding: 'base64' })
+    .getAccountInfo(globalConfigPda, { encoding: 'base64' })
     .send();
 
   const base64Data = globalConfigAccountInfo.value.data[0];

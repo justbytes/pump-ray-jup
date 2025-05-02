@@ -17,10 +17,11 @@ import {
   TOKEN_PROGRAM_ADDRESS,
 } from 'gill/programs/token';
 
-import { estimatePumpswapBaseAmountOut } from './pumpswapPool';
+import { getBaseEstimatedAmountOut } from './pumpswapPool';
 import { getPriorityFees } from '../../helpers/helpers';
 import { PUMPSWAP_PROGRAM_ID } from '../constants';
-import { getGlobalConfigPda, getGlobalData } from '../pumpfun/pumpfunGlobal';
+import { getGlobalData } from '../pumpfun/pumpfunGlobal';
+import { getGlobalConfigData, getGlobalConfigPda } from './pumpswapGlobalConfig';
 
 /**
  * Buys from PumpSwap after a token graduates
@@ -76,16 +77,24 @@ export const pumpswapBuy = async (
 
   // Get latest blockhash
   const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
-  // Get the user's ATA for the base mint
+
+  // Determine user's ATA address for the token
   const userBaseAta = await getAssociatedTokenAccountAddress(
+    baseMintAddress,
+    signer.address,
+    TOKEN_PROGRAM_ADDRESS
+  );
+  // Determine user's ATA address for the token
+  const userQuoteAta = await getAssociatedTokenAccountAddress(
     baseMintAddress,
     signer.address,
     TOKEN_PROGRAM_ADDRESS
   );
 
   console.log(userBaseAta);
+  console.log(userQuoteAta);
 
-  // Instruction to create the user's ATA
+  // Instruction to get or create the user's ATA
   const userBaseAtaIx = getCreateAssociatedTokenIdempotentInstruction({
     mint: baseMintAddress,
     owner: signer.address,
@@ -95,16 +104,7 @@ export const pumpswapBuy = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
-  // Get the user's ATA for the token
-  const userQuoteAta = await getAssociatedTokenAccountAddress(
-    baseMintAddress,
-    signer.address,
-    TOKEN_PROGRAM_ADDRESS
-  );
-
-  console.log(userQuoteAta);
-
-  // Instruction to create the user's ATA
+  // Instruction to get or create the user's ATA
   const userQuoteAtaIx = getCreateAssociatedTokenIdempotentInstruction({
     mint: quoteMintAddress,
     owner: signer.address,
@@ -114,14 +114,14 @@ export const pumpswapBuy = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
-  const globalData = await getGlobalData(connection);
+  const globalConfigData = await getGlobalConfigData(connection);
 
   // Multiply buy the quote decimals
   quoteAmount = quoteAmount * 10 ** quoteDecimals;
 
   // Calculate token output with slippage
-  const { success, message, poolData, estimatedBaseAmountOut, minimumBaseAmountOut } =
-    await estimatePumpswapBaseAmountOut(
+  const { success, message, poolData, baseTokensEstimate, minimumBaseAmountOut } =
+    await getBaseEstimatedAmountOut(
       connection,
       baseMintAddress,
       quoteMintAddress,
@@ -129,7 +129,7 @@ export const pumpswapBuy = async (
       slippage
     );
 
-  console.log('EST: ', estimatedBaseAmountOut);
+  console.log('EST: ', baseTokensEstimate);
 
   if (!success) {
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
@@ -137,7 +137,7 @@ export const pumpswapBuy = async (
   }
 
   // Format the instruction data
-  let data: Uint8Array = formatPumpswapBuyData(minimumAmountOut, quoteAmount);
+  let data: Uint8Array = formatPumpswapBuyData(minimumBaseAmountOut, quoteAmount);
 
   // Create the buy instruction
   const buyTokenIx: IInstruction = {
@@ -180,7 +180,7 @@ export const pumpswapBuy = async (
         role: AccountRole.WRITABLE,
       },
       {
-        address: address('JCRGumoE9Qi5BBgULTgdgTLjSgkCMSbF62ZZfGs84JeU'), // protocol_fee_recipient
+        address: address('JCRGumoE9Qi5BBgULTgdgTLjSgkCMSbF62ZZfGs84JeU'), // protocol_fee_recipient getGlobalConfigData().protocol_fee_recipients[7]
         role: AccountRole.READONLY,
       },
       {
@@ -286,7 +286,7 @@ export const pumpswapBuy = async (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpswapBuyData(minBaseAmountOut: number, maxQuoteAmountIn: number) {
+export function formatPumpswapBuyData(minBaseAmountOut: any, maxQuoteAmountIn: any) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
