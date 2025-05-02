@@ -18,6 +18,8 @@ import {
   getPumpPoolPda,
   getPumpPoolAuthorityPda,
   getPumpPoolData,
+  getPumpswapPrice,
+  getBaseEstimatedAmountOut,
 } from './src/pump/pumpswap/pumpswapPool';
 import {
   fetchMint,
@@ -25,6 +27,7 @@ import {
   TOKEN_PROGRAM_ADDRESS,
 } from 'gill/programs/token';
 import { getGlobalData } from './src/pump/pumpfun/pumpfunGlobal';
+import { getGlobalConfigData } from './src/pump/pumpswap/pumpswapGlobalConfig';
 dotenv.config();
 
 async function main() {
@@ -67,6 +70,15 @@ async function main() {
 
   const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
   const base = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'; // PumpSwap token to recieve
+
+  let global = await getBaseEstimatedAmountOut(
+    connection,
+    address(base),
+    address(quote),
+    solAmount,
+    slippage
+  );
+  console.log(global);
 
   // // Test PumpSwap buy
   // let response = await pumpswapBuy(
