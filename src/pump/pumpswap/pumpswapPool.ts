@@ -2,7 +2,12 @@ import * as borsh from '@coral-xyz/borsh';
 import { address, Address, getAddressEncoder, getProgramDerivedAddress } from 'gill';
 import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../constants';
 import BN from 'bn.js';
-import { fetchMint } from 'gill/programs/token';
+import {
+  fetchMint,
+  getAssociatedTokenAccountAddress,
+  TOKEN_2022_PROGRAM_ADDRESS,
+} from 'gill/programs/token';
+import { AccountLayout, getAssociatedTokenAddressSync } from '@solana/spl-token';
 
 export const CANONICAL_POOL_INDEX = 0;
 
@@ -55,6 +60,14 @@ export const getPumpPoolPda = async (owner: Address, baseMint: Address, quoteMin
   return poolPda;
 };
 
+export async function getLpMintPda(pool: Address) {
+  const [lpMintPda, lpMintPdaBump] = await getProgramDerivedAddress({
+    seeds: ['pool_lp_mint', getAddressEncoder().encode(pool)],
+    programAddress: address(PUMPSWAP_PROGRAM_ID),
+  });
+  return lpMintPda;
+}
+
 // Gets all of the pool data including token accounts and their data
 export const getPumpPoolData = async (baseMint: Address, quoteMint: Address, connection: any) => {
   // Get pool authority/ owner
@@ -91,23 +104,13 @@ export const getPumpPoolData = async (baseMint: Address, quoteMint: Address, con
 
   const quoteTokenAccountData = tokenAccountSchema.decode(dataBuffer);
 
-  return { pumpPoolPda, ...data, quoteTokenAccountData, baseTokenAccountData };
-};
-
-// Returns price in quote tokens
-export const getPumpswapPrice = async (baseMint: Address, quoteMint: Address, connection: any) => {
-  const poolData = await getPumpPoolData(baseMint, quoteMint, connection);
-
-  const quoteMintAccountData = await fetchMint(connection.rpc, address(quoteMint));
-  let quoteDecimals = quoteMintAccountData.data.decimals;
-
-  const baseMintAccountData = await fetchMint(connection.rpc, address(baseMint));
-  let baseDecimals = baseMintAccountData.data.decimals;
-
-  const quoteReserves = poolData.quoteTokenAccountData.amount;
-  const baseReserves = poolData.baseTokenAccountData.amount;
-
-  return quoteReserves / 10 ** quoteDecimals / (baseReserves / 10 ** baseDecimals);
+  return {
+    pumpPoolPda,
+    pumpPoolAuthorityPda,
+    ...data,
+    quoteTokenAccountData,
+    baseTokenAccountData,
+  };
 };
 
 export const getBaseEstimatedAmountOut = async (
@@ -167,6 +170,7 @@ export const getBaseEstimatedAmountOut = async (
   return {
     success: true,
     poolData,
+    quoteAmountRaw,
     baseTokensEstimate: tokensAfterFeeRaw,
     minimumBaseAmountOut: minimumBaseAmountOutRaw,
   };
