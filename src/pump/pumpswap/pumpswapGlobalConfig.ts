@@ -1,5 +1,5 @@
 import * as borsh from '@coral-xyz/borsh';
-import { address, getProgramDerivedAddress } from 'gill';
+import { Address, address, getAddressEncoder, getProgramDerivedAddress } from 'gill';
 import { PUMPSWAP_PROGRAM_ID } from '../constants';
 
 // Structure of the Pool
@@ -51,4 +51,25 @@ export async function getGlobalConfigData(connection: any) {
   const data = globalConfigSchema.decode(dataBuffer);
 
   return { globalConfigPda, ...data };
+}
+
+export async function getProtocolFeeRecipientTokenAccount(
+  protocolFeeRecipient: Address,
+  quoteTokenProgram: Address,
+  quoteMint: Address
+) {
+  // The ATA program constant from IDL
+  const ATA_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+
+  // Find the PDA with the required seeds
+  const [tokenAccountPda, _bump] = await getProgramDerivedAddress({
+    seeds: [
+      getAddressEncoder().encode(protocolFeeRecipient),
+      getAddressEncoder().encode(quoteTokenProgram),
+      getAddressEncoder().encode(quoteMint),
+    ],
+    programAddress: address(ATA_PROGRAM_ID),
+  });
+
+  return tokenAccountPda;
 }

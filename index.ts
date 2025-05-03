@@ -15,19 +15,17 @@ import { getBondingCurveData, getPumpfunPrice } from './src/pump/pumpfun/pumpfun
 
 import { pumpswapBuy } from './src/pump/pumpswap/pumswapBuy';
 import {
-  getPumpPoolPda,
-  getPumpPoolAuthorityPda,
-  getPumpPoolData,
-  getPumpswapPrice,
-  getBaseEstimatedAmountOut,
-} from './src/pump/pumpswap/pumpswapPool';
-import {
   fetchMint,
   getAssociatedTokenAccountAddress,
+  getSyncNativeInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from 'gill/programs/token';
 import { getGlobalData } from './src/pump/pumpfun/pumpfunGlobal';
-import { getGlobalConfigData } from './src/pump/pumpswap/pumpswapGlobalConfig';
+import {
+  getGlobalConfigData,
+  getProtocolFeeRecipientTokenAccount,
+} from './src/pump/pumpswap/pumpswapGlobalConfig';
+import { getPumpPoolQuoteTokenAccount, pumpAmmEventAuthorityPda } from './src/pump/pumpswap/utils';
 dotenv.config();
 
 async function main() {
@@ -71,25 +69,22 @@ async function main() {
   const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
   const base = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'; // PumpSwap token to recieve
 
-  let global = await getBaseEstimatedAmountOut(
-    connection,
-    address(base),
-    address(quote),
+  // Test PumpSwap buy
+  let response = await pumpswapBuy(
+    base,
+    quote,
     solAmount,
-    slippage
+    slippage,
+    signer,
+    connection,
+    process.env.HELIUS_URL?.toString()
   );
-  console.log(global);
+  console.log('Buy transaction response', response);
 
-  // // Test PumpSwap buy
-  // let response = await pumpswapBuy(
-  //   mint,
-  //   solAmount,
-  //   slippage,
-  //   signer,
-  //   connection,
-  //   process.env.HELIUS_URL?.toString()
-  // );
-  // console.log('Buy transaction response', response);
+  if (response.success == false) {
+    console.log(response.data.error.cause);
+    console.log(response.data.error.context);
+  }
 }
 
 main();
