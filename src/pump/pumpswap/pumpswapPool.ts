@@ -2,12 +2,7 @@ import * as borsh from '@coral-xyz/borsh';
 import { address, Address, getAddressEncoder, getProgramDerivedAddress } from 'gill';
 import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../constants';
 import BN from 'bn.js';
-import {
-  fetchMint,
-  getAssociatedTokenAccountAddress,
-  TOKEN_2022_PROGRAM_ADDRESS,
-} from 'gill/programs/token';
-import { AccountLayout, getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { fetchMint } from 'gill/programs/token';
 
 export const CANONICAL_POOL_INDEX = 0;
 
@@ -113,11 +108,12 @@ export const getPumpPoolData = async (baseMint: Address, quoteMint: Address, con
   };
 };
 
-export const getBaseEstimatedAmountOut = async (
+export const getEstimatedAmountOut = async (
+  buy: boolean,
   connection: any,
   baseMint: Address,
   quoteMint: Address,
-  quoteAmount: number,
+  amount: number,
   slippage: number
 ) => {
   const poolData = await getPumpPoolData(baseMint, quoteMint, connection);
@@ -127,51 +123,176 @@ export const getBaseEstimatedAmountOut = async (
       success: false,
       message: 'There was an error getting pool data from pumpswap',
       poolData,
-      baseTokensEstimate: 0,
+      amountRaw: null,
+      tokensEstimate: 0,
       minimumAmountOut: 0,
     };
   }
 
-  // Get decimal information
-  const quoteMintAccountData = await fetchMint(connection.rpc, address(quoteMint));
-  const quoteDecimals = quoteMintAccountData.data.decimals;
+  // Get the estimate out for the buy or sell
+  if (buy) {
+    return buying(amount, slippage);
+  } else {
+    return selling(amount, slippage);
+  }
 
-  const baseMintAccountData = await fetchMint(connection.rpc, address(baseMint));
-  const baseDecimals = baseMintAccountData.data.decimals;
+  async function buying(amount: number, slippage: number) {
+    // Get decimal information
+    const quoteMintAccountData = await fetchMint(connection.rpc, address(quoteMint));
+    const quoteDecimals = quoteMintAccountData.data.decimals;
 
-  // Convert BN to JavaScript numbers and adjust for decimals
-  const quoteReservesAdjusted =
-    Number(poolData.quoteTokenAccountData.amount.toString()) / 10 ** quoteDecimals;
-  const baseReservesAdjusted =
-    Number(poolData.baseTokenAccountData.amount.toString()) / 10 ** baseDecimals;
+    const baseMintAccountData = await fetchMint(connection.rpc, address(baseMint));
+    const baseDecimals = baseMintAccountData.data.decimals;
 
-  // Convert input amount to raw amount with decimals
-  const quoteAmountRaw = quoteAmount * 10 ** quoteDecimals;
+    // Convert BN to JavaScript numbers and adjust for decimals
+    const quoteReservesAdjusted =
+      Number(poolData.quoteTokenAccountData.amount.toString()) / 10 ** quoteDecimals;
+    const baseReservesAdjusted =
+      Number(poolData.baseTokenAccountData.amount.toString()) / 10 ** baseDecimals;
 
-  // Calculate the constant product
-  const k = quoteReservesAdjusted * baseReservesAdjusted;
+    // Convert input amount to raw amount with decimals
+    const amountRaw = amount * 10 ** quoteDecimals;
 
-  // Calculate new reserves after swap
-  const newQuoteReservesAdjusted = quoteAmount + quoteReservesAdjusted;
-  const newBaseReservesAdjusted = k / newQuoteReservesAdjusted;
+    // Calculate the constant product
+    const k = quoteReservesAdjusted * baseReservesAdjusted;
 
-  // Calculate token amount out
-  const baseTokensEstimateAdjusted = baseReservesAdjusted - newBaseReservesAdjusted;
+    // Calculate new reserves after swap
+    const newQuoteReservesAdjusted = amount + quoteReservesAdjusted;
+    const newBaseReservesAdjusted = k / newQuoteReservesAdjusted;
 
-  // Apply fee
-  const feeBasisPoints = 25;
-  const feeFactor = 1 - feeBasisPoints / 10000;
-  const tokensAfterFeeAdjusted = baseTokensEstimateAdjusted * feeFactor;
+    // Calculate token amount out
+    const baseTokensEstimateAdjusted = baseReservesAdjusted - newBaseReservesAdjusted;
 
-  // Convert back to raw amounts
-  const tokensAfterFeeRaw = Math.floor(tokensAfterFeeAdjusted * 10 ** baseDecimals);
-  const minimumBaseAmountOutRaw = Math.floor(tokensAfterFeeRaw * (1 - slippage));
+    // Apply fee
+    const feeBasisPoints = 25;
+    const feeFactor = 1 - feeBasisPoints / 10000;
+    const tokensAfterFeeAdjusted = baseTokensEstimateAdjusted * feeFactor;
 
-  return {
-    success: true,
-    poolData,
-    quoteAmountRaw,
-    baseTokensEstimate: tokensAfterFeeRaw,
-    minimumBaseAmountOut: minimumBaseAmountOutRaw,
-  };
+    // Convert back to raw amounts
+    const tokensAfterFeeRaw = Math.floor(tokensAfterFeeAdjusted * 10 ** baseDecimals);
+    const minimumBaseAmountOutRaw = Math.floor(tokensAfterFeeRaw * (1 - slippage));
+
+    return {
+      success: true,
+      message: '',
+      poolData,
+      amountRaw,
+      tokensEstimate: tokensAfterFeeRaw,
+      minimumAmountOut: minimumBaseAmountOutRaw,
+    };
+  }
+
+  async function selling(amount: number, slippage: number) {
+    // Get decimal information
+    const baseMintAccountData = await fetchMint(connection.rpc, address(baseMint));
+    const baseDecimals = baseMintAccountData.data.decimals;
+
+    // Convert BN to JavaScript numbers and adjust for decimals
+    const quoteReservesAdjusted = Number(poolData.quoteTokenAccountData.amount.toString());
+    const baseReservesAdjusted = Number(poolData.baseTokenAccountData.amount.toString());
+
+    // Convert input amount to raw amount with decimals
+    const amountRaw = amount * 10 ** baseDecimals;
+
+    // Calculate the constant product
+    const k = quoteReservesAdjusted * baseReservesAdjusted;
+    const newBaseReservesAdjusted = amountRaw + baseReservesAdjusted;
+    const newQuoteReservesAdjusted = k / newBaseReservesAdjusted;
+    const quoteTokensEstimateAdjusted = quoteReservesAdjusted - newQuoteReservesAdjusted;
+
+    // Apply fee
+    const feeBasisPoints = 25;
+    const feeFactor = 1 - feeBasisPoints / 10000;
+    const tokensAfterFeeAdjusted = quoteTokensEstimateAdjusted * feeFactor;
+
+    // Convert back to raw amounts
+    //const tokensAfterFeeRaw = Math.floor(tokensAfterFeeAdjusted);
+    const minimumBaseAmountOutRaw = Math.floor(tokensAfterFeeAdjusted * (1 - slippage));
+
+    return {
+      success: true,
+      message: '',
+      poolData,
+      amountRaw,
+      tokensEstimate: tokensAfterFeeAdjusted,
+      minimumAmountOut: minimumBaseAmountOutRaw,
+    };
+  }
 };
+
+// export const getSellEstimatedAmountOut = async (
+//   connection: any,
+//   baseMint: Address,
+//   quoteMint: Address,
+//   quoteAmount: number,
+//   slippage: number
+// ) => {
+//   // flip the quote and base to find the correct pool
+//   const poolData = await getPumpPoolData(quoteMint, baseMint, connection);
+
+//   if (!poolData) {
+//     return {
+//       success: false,
+//       message: 'There was an error getting pool data from pumpswap',
+//       poolData,
+//       baseTokensEstimate: 0,
+//       minimumAmountOut: 0,
+//     };
+//   }
+
+//   // Get decimal information
+//   const quoteMintAccountData = await fetchMint(connection.rpc, address(baseMint));
+//   const baseMintAccountData = await fetchMint(connection.rpc, address(quoteMint));
+//   const quoteDecimals = baseMintAccountData.data.decimals; //pump
+//   const baseDecimals = quoteMintAccountData.data.decimals; //sol
+
+//   // console.log(quoteDecimals);
+//   // console.log(baseDecimals);
+//   // Convert BN to JavaScript numbers and adjust for decimals
+//   const quoteReservesAdjusted = Number(poolData.baseTokenAccountData.amount.toString());
+//   const baseReservesAdjusted = Number(poolData.quoteTokenAccountData.amount.toString());
+
+//   // Convert input amount to raw amount with decimals
+//   const quoteAmountRaw = quoteAmount * 10 ** quoteDecimals;
+
+//   // console.log('quoteResservesAdjusted: ', quoteReservesAdjusted);
+//   // console.log('baseReservesAdjusted: ', baseReservesAdjusted);
+//   // console.log('quote amount raw: ', quoteAmountRaw);
+
+//   // Calculate the constant product
+//   const k = quoteReservesAdjusted * baseReservesAdjusted;
+
+//   // console.log('k', k);
+
+//   // Calculate new reserves after swap
+//   const newQuoteReservesAdjusted = quoteAmountRaw + quoteReservesAdjusted;
+//   const newBaseReservesAdjusted = k / newQuoteReservesAdjusted;
+
+//   // console.log('newQuoteReservesAdjusted: ', newQuoteReservesAdjusted);
+//   // console.log('newBaseReservesAdjusted: ', newBaseReservesAdjusted);
+
+//   // Calculate token amount out
+//   const baseTokensEstimateAdjusted = baseReservesAdjusted - newBaseReservesAdjusted;
+
+//   // console.log('baseTokensEstimatedAdjusted: ', baseTokensEstimateAdjusted);
+
+//   // Apply fee
+//   const feeBasisPoints = 25;
+//   const feeFactor = 1 - feeBasisPoints / 10000;
+//   const tokensAfterFeeAdjusted = baseTokensEstimateAdjusted * feeFactor;
+//   // console.log('feeFactor: ', feeFactor);
+//   // console.log('tokensAfterFeeAdjusted: ', tokensAfterFeeAdjusted);
+
+//   const minimumBaseAmountOutRaw = Math.floor(tokensAfterFeeAdjusted * (1 - slippage));
+
+//   // console.log('tokensAfterFees: ', tokensAfterFeeAdjusted);
+//   // console.log('minimumBaseAmountOutRaw: ', minimumBaseAmountOutRaw);
+
+//   return {
+//     success: true,
+//     poolData,
+//     quoteAmountRaw,
+//     baseTokensEstimate: tokensAfterFeeAdjusted,
+//     minimumBaseAmountOut: minimumBaseAmountOutRaw,
+//   };
+// };

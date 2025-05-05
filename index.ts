@@ -13,7 +13,7 @@ import { pumpfunBuy } from './src/pump/pumpfun/pumpfunBuy';
 import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
 import { getBondingCurveData, getPumpfunPrice } from './src/pump/pumpfun/pumpfunBondingCurve';
 
-import { pumpswapBuy } from './src/pump/pumpswap/pumswapBuy';
+import { pumpswapSwap } from './src/pump/pumpswap/pumpswapSwap';
 import {
   fetchMint,
   getAssociatedTokenAccountAddress,
@@ -25,13 +25,13 @@ import {
   getGlobalConfigData,
   getProtocolFeeRecipientTokenAccount,
 } from './src/pump/pumpswap/pumpswapGlobalConfig';
-import { getPumpPoolQuoteTokenAccount, pumpAmmEventAuthorityPda } from './src/pump/pumpswap/utils';
+
 dotenv.config();
 
 async function main() {
   const slippage = 0.01; // 1% slippage
   const solAmount = 0.0001; // Buy 0.0001 sol worth
-  const tokenAmount = 3300;
+  const tokenAmount = 0.0001;
 
   // Creates connection to Solana
   const connection: SolanaClient<string> = createSolanaClient({
@@ -68,22 +68,25 @@ async function main() {
 
   const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
   const base = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'; // PumpSwap token to recieve
+  const amount = 1000; // Buy 0.0001 sol worth
 
   // Test PumpSwap buy
-  let response = await pumpswapBuy(
+  let response = await pumpswapSwap(
     base,
     quote,
-    solAmount,
+    amount,
     slippage,
+    false,
     signer,
     connection,
     process.env.HELIUS_URL?.toString()
   );
-  console.log('Buy transaction response', response);
 
-  if (response.success == false) {
-    console.log(response.data.error.cause);
-    console.log(response.data.error.context);
+  if (!response?.success) {
+    console.log(response?.data.error.context);
+    console.log(response?.data.error.content);
+  } else {
+    console.log(response);
   }
 }
 
