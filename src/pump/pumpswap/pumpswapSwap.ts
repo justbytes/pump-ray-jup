@@ -16,32 +16,27 @@ import {
   getCloseAccountInstruction,
   getCreateAssociatedTokenIdempotentInstruction,
   getSyncNativeInstruction,
-  getTransferInstruction,
   TOKEN_PROGRAM_ADDRESS,
 } from 'gill/programs/token';
 
-import { getBaseEstimatedAmountOut } from './pumpswapPool';
+import { getEstimatedAmountOut } from './pumpswapPool';
 import { getPriorityFees } from '../../helpers/helpers';
 import { PUMPSWAP_PROGRAM_ID } from '../constants';
-import { getGlobalData } from '../pumpfun/pumpfunGlobal';
-import {
-  getGlobalConfigData,
-  getGlobalConfigPda,
-  getProtocolFeeRecipientTokenAccount,
-} from './pumpswapGlobalConfig';
+import { getGlobalConfigData, getProtocolFeeRecipientTokenAccount } from './pumpswapGlobalConfig';
 import { pumpAmmEventAuthorityPda } from './utils';
 
-global.__GILL_DEBUG__ = true;
-global.__GILL_DEBUG_LEVEL__ = 'debug';
+// global.__GILL_DEBUG__ = true;
+// global.__GILL_DEBUG_LEVEL__ = 'debug';
 
 /**
  * Buys from PumpSwap after a token graduates
  */
-export const pumpswapBuy = async (
+export const pumpswapSwap = async (
   baseMint: string, // buying
   quoteMint: string, // paying with
-  quoteAmount: number,
+  amount: number,
   slippage: number,
+  buy: boolean,
   signer: KeyPairSigner,
   connection: any,
   rpcUrl?: string,
@@ -51,16 +46,18 @@ export const pumpswapBuy = async (
   let quoteDecimals, quoteTokenProgram;
   let baseDecimals, baseTokenProgram;
 
+  // Create an array that will contain the instructions for the tx
   let instructions: IInstruction[] = [];
 
   // Validate inputs
-  if (quoteAmount <= 0) {
+  if (amount <= 0) {
     return {
       success: false,
       message: 'Error: quoteAmount must be greater than zero',
     };
   }
 
+  // Make sure we have a valid slippage value
   if (slippage < 0 || slippage > 1) {
     return {
       success: false,
@@ -68,6 +65,7 @@ export const pumpswapBuy = async (
     };
   }
 
+  // rpcUrl isn't nessesary if we have computeUnitPrice already
   if (rpcUrl && computeUnitPrice) {
     return {
       success: false,
@@ -76,22 +74,22 @@ export const pumpswapBuy = async (
     };
   }
 
-  const quoteMintAccountData = await fetchMint(connection.rpc, address(quoteMint));
-  quoteDecimals = quoteMintAccountData.data.decimals;
-  quoteTokenProgram = quoteMintAccountData.programAddress;
-
-  const baseMintAccountData = await fetchMint(connection.rpc, address(baseMint));
-  baseDecimals = baseMintAccountData.data.decimals;
-  baseTokenProgram = baseMintAccountData.programAddress;
-
   // Convert the mint address to type address
   const baseMintAddress = address(baseMint);
   const quoteMintAddress = address(quoteMint);
 
+  // Grab token mint data
+  const baseMintAccountData = await fetchMint(connection.rpc, baseMintAddress);
+  const quoteMintAccountData = await fetchMint(connection.rpc, quoteMintAddress);
+
+  // Asign mint data
+  quoteDecimals = quoteMintAccountData.data.decimals;
+  quoteTokenProgram = quoteMintAccountData.programAddress;
+  baseDecimals = baseMintAccountData.data.decimals;
+  baseTokenProgram = baseMintAccountData.programAddress;
+
   // Get latest blockhash
   const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
-
-  console.log('Latest block hash: ', latestBlockhash);
 
   // Determine user's ATA address for the token
   const userBaseAta = await getAssociatedTokenAccountAddress(
@@ -109,45 +107,43 @@ export const pumpswapBuy = async (
     TOKEN_PROGRAM_ADDRESS
   );
 
-  console.log('User quote ata: ', userQuoteAta);
-
+  // Get global config data and assign the protocol fee recipient
   const globalConfigData = await getGlobalConfigData(connection);
-
-  console.log(globalConfigData.globalConfigPda.toString());
-
   const protocolFeeRecipient = globalConfigData.protocol_fee_recipients[1];
 
-  console.log('Protocol fee recipient: ', protocolFeeRecipient.toString());
-
+  // Get the token account for the fee recipient
   const protocolFeeRecipientTokenAccount = await getProtocolFeeRecipientTokenAccount(
     address(protocolFeeRecipient.toString()),
     address(quoteTokenProgram),
     quoteMintAddress
   );
 
-  console.log('Protocol fee recipient token account: ', protocolFeeRecipientTokenAccount);
+  let pool, data: Uint8Array;
 
-  // Calculate token output with slippage
-  const { success, message, poolData, quoteAmountRaw, baseTokensEstimate, minimumBaseAmountOut } =
-    await getBaseEstimatedAmountOut(
+  // Calculate base token output with slippage and get pool data
+  const { success, message, poolData, amountRaw, tokensEstimate, minimumAmountOut } =
+    await getEstimatedAmountOut(
+      buy,
       connection,
       baseMintAddress,
       quoteMintAddress,
-      quoteAmount,
+      amount,
       slippage
     );
 
-  if (!success || quoteAmountRaw == undefined) {
+  // Validate response from getBaseEstimatedAmountOut function
+  if (!success || amountRaw == undefined) {
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
     return { success, message, data: poolData };
   }
 
   // Format the instruction data
-  let data: Uint8Array = formatPumpswapBuyData(minimumBaseAmountOut, quoteAmountRaw);
-
-  console.log('quote amount raw: ', quoteAmountRaw);
-
-  console.log('EST: ', baseTokensEstimate);
+  if (buy) {
+    data = formatPumpswapBuyData(minimumAmountOut, amountRaw);
+    pool = poolData;
+  } else {
+    data = formatPumpswapSellData(amountRaw, minimumAmountOut);
+  }
 
   // Instruction to get or create the user base ATA
   const userBaseAtaIx = getCreateAssociatedTokenIdempotentInstruction({
@@ -169,28 +165,14 @@ export const pumpswapBuy = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
-  // // For transfering SPL tokens
-  // const transferSolIx = getTransferInstruction({
-  //   source: signer.address,
-  //   destination: address(userQuoteAta),
-  //   amount: quoteAmountRaw,
-  //   authority: signer,
-  // });
+  // When using SOL setup transfer to quoteAta
   const transferSolIx = getTransferSolInstruction({
     source: signer,
     destination: userQuoteAta,
-    amount: quoteAmountRaw,
+    amount: amountRaw,
   });
-  // const transferSolToAtaIx = getTransferInstruction({
 
-  // })
-
-  // const transferSolIx = getSystemTransferInstruction({
-  //   source: signer, // This should be a signer, not just the address
-  //   destination: userQuoteAta, // The destination token account
-  //   lamports: quoteAmountRaw, // The amount in lamports
-  // });
-
+  // "Convert" SOL to WSOL in th quoteAta
   const syncSolAccountsIx = getSyncNativeInstruction(
     {
       account: userQuoteAta,
@@ -198,6 +180,7 @@ export const pumpswapBuy = async (
     { programAddress: TOKEN_PROGRAM_ADDRESS }
   );
 
+  // Close a WSOL quote ata
   const closeAccountIx = getCloseAccountInstruction(
     {
       account: userQuoteAta,
@@ -209,8 +192,8 @@ export const pumpswapBuy = async (
     }
   );
 
-  // Create the buy instruction
-  const buyTokenIx: IInstruction = {
+  // Buy instruction for PumpSwap
+  const swapIx: IInstruction = {
     programAddress: address(PUMPSWAP_PROGRAM_ID),
     accounts: [
       {
@@ -284,23 +267,34 @@ export const pumpswapBuy = async (
     ],
     data,
   };
+
+  // Variables for tx
   let tx, signedTransaction;
 
-  if (quoteMint == 'So11111111111111111111111111111111111111112') {
+  // If using SOL for the buy we need to send the SOL and convert it to WSOL for the buy tx to process it then we clean up
+  // Otherwise the quote token will already be in the quoteAta and no need to do any transfers
+  if (quoteMint == 'So11111111111111111111111111111111111111112' && buy) {
+    console.log('****   BUYING   *****');
+
     instructions.push(
       userQuoteAtaIx,
       userBaseAtaIx,
       transferSolIx,
       syncSolAccountsIx,
-      buyTokenIx,
+      swapIx,
       closeAccountIx
     );
+  } else if (quoteMint == 'So11111111111111111111111111111111111111112' && !buy) {
+    console.log('****   SELLING   *****');
+
+    instructions.push(userQuoteAtaIx, userBaseAtaIx, swapIx, closeAccountIx);
   } else {
-    instructions.push(userBaseAtaIx, userQuoteAtaIx, buyTokenIx);
+    instructions.push(userBaseAtaIx, userQuoteAtaIx, swapIx);
   }
 
   // Creates a transaction that will use the Helius api to get the estimated priority fee
   if (rpcUrl) {
+    // Unoptomised tx
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
@@ -309,13 +303,13 @@ export const pumpswapBuy = async (
       computeUnitLimit,
     });
 
-    // Sign the transaction
+    // Sign unoptomised transaction
     signedTransaction = await signTransactionMessageWithSigners(tx);
 
     // Use signed transaction to get priority fee
     const priorityFeeEstimate: number = await getPriorityFees(rpcUrl, signedTransaction);
 
-    // The final tx
+    // The final optomised tx
     tx = createTransaction({
       feePayer: signer,
       version: 'legacy',
@@ -336,6 +330,7 @@ export const pumpswapBuy = async (
     });
   }
 
+  // Sign the optomised tx
   signedTransaction = await signTransactionMessageWithSigners(tx);
 
   // Get the explorer link for debugging
@@ -343,7 +338,7 @@ export const pumpswapBuy = async (
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log('| BUY | Transaction Explorer Link:\n', explorerLink);
+  console.log('| SWAP | Transaction Explorer Link:\n', explorerLink);
 
   // Send and confirm the transaction or return the error
   try {
@@ -372,8 +367,6 @@ export const pumpswapBuy = async (
 export function formatPumpswapBuyData(minBaseAmountOut: any, maxQuoteAmountIn: any) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
-  console.log('minBaseAmountOut: ', minBaseAmountOut);
-  console.log('maxQuoteAmountIn: ', maxQuoteAmountIn);
 
   // Write the discriminator for the 'buy' instruction
   dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
@@ -381,6 +374,25 @@ export function formatPumpswapBuyData(minBaseAmountOut: any, maxQuoteAmountIn: a
   // Write the amounts to the buffer
   dataBuffer.writeBigUInt64LE(BigInt(minBaseAmountOut), 8);
   dataBuffer.writeBigInt64LE(BigInt(maxQuoteAmountIn), 16);
+
+  return new Uint8Array(dataBuffer);
+}
+
+/**
+ * Format the data for the buy instruction
+ * @param {number} minTokenAmount Minimum amount of tokens to receive
+ * @param {number} maxSolToSpend Maximum amount of SOL to spend
+ */
+export function formatPumpswapSellData(maxBaseAmountIn: any, minQuoteAmounOut: any) {
+  // Create the data buffer
+  const dataBuffer = Buffer.alloc(24);
+
+  // Write the discriminator for the 'buy' instruction
+  dataBuffer.write('33e685a4017f83ad', 'hex'); // Anchor discriminator for 'buy'
+
+  // Write the amounts to the buffer
+  dataBuffer.writeBigUInt64LE(BigInt(maxBaseAmountIn), 8);
+  dataBuffer.writeBigInt64LE(BigInt(minQuoteAmounOut), 16);
 
   return new Uint8Array(dataBuffer);
 }
