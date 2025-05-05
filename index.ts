@@ -67,8 +67,8 @@ async function main() {
   // console.log('Sell transaction response', response);
 
   const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
-  const base = '7DasPgeC8TJVw4DY1EzcPSSrfCPhSzNmg4snjVuxpump'; // PumpSwap token to recieve
-  const amount = 1000; // Buy 0.0001 sol worth
+  const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
+  const amount = 5; // Buy 0.0001 sol worth
 
   // Test PumpSwap buy
   let response = await pumpswapSwap(
@@ -76,7 +76,7 @@ async function main() {
     quote,
     amount,
     slippage,
-    false,
+    false, // buy = true | sell = false
     signer,
     connection,
     process.env.HELIUS_URL?.toString()
