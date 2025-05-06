@@ -7,8 +7,11 @@ import {
   IInstruction,
   KeyPairSigner,
   signTransactionMessageWithSigners,
-} from 'gill';
-import { getTransferSolInstruction, SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
+} from "gill";
+import {
+  getTransferSolInstruction,
+  SYSTEM_PROGRAM_ADDRESS,
+} from "gill/programs";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   fetchMint,
@@ -17,12 +20,15 @@ import {
   getCreateAssociatedTokenIdempotentInstruction,
   getSyncNativeInstruction,
   TOKEN_PROGRAM_ADDRESS,
-} from 'gill/programs/token';
-import { getEstimatedAmountOut } from './pumpswapPool';
-import { getPriorityFees } from '../../helpers/helpers';
-import { PUMPSWAP_PROGRAM_ID } from '../constants';
-import { getGlobalConfigData, getProtocolFeeRecipientTokenAccount } from './pumpswapGlobalConfig';
-import { pumpAmmEventAuthorityPda } from './utils';
+} from "gill/programs/token";
+import { getEstimatedAmountOut } from "./pumpswapPool";
+import { getPriorityFees } from "../../helpers/helpers";
+import { PUMPSWAP_PROGRAM_ID } from "../constants";
+import {
+  getGlobalConfigData,
+  getProtocolFeeRecipientTokenAccount,
+} from "./pumpswapGlobalConfig";
+import { pumpAmmEventAuthorityPda } from "./utils";
 
 // global.__GILL_DEBUG__ = true;
 // global.__GILL_DEBUG_LEVEL__ = 'debug';
@@ -52,7 +58,7 @@ export const pumpswapSwap = async (
   if (amount <= 0) {
     return {
       success: false,
-      message: 'Error: quoteAmount must be greater than zero',
+      message: "Error: quoteAmount must be greater than zero",
     };
   }
 
@@ -60,7 +66,7 @@ export const pumpswapSwap = async (
   if (slippage < 0 || slippage > 1) {
     return {
       success: false,
-      message: 'Error: slippage must be between 0 and 1',
+      message: "Error: slippage must be between 0 and 1",
     };
   }
 
@@ -69,7 +75,7 @@ export const pumpswapSwap = async (
     return {
       success: false,
       message:
-        'Error: cannot pass both rpcUrl and computeUnitPrice. One or the other, rpcUrl gets Helius computeUnitPrice estimate',
+        "Error: cannot pass both rpcUrl and computeUnitPrice. One or the other, rpcUrl gets Helius computeUnitPrice estimate",
     };
   }
 
@@ -79,7 +85,10 @@ export const pumpswapSwap = async (
 
   // Grab token mint data
   const baseMintAccountData = await fetchMint(connection.rpc, baseMintAddress);
-  const quoteMintAccountData = await fetchMint(connection.rpc, quoteMintAddress);
+  const quoteMintAccountData = await fetchMint(
+    connection.rpc,
+    quoteMintAddress
+  );
 
   // Asign mint data
   quoteDecimals = quoteMintAccountData.data.decimals;
@@ -88,7 +97,9 @@ export const pumpswapSwap = async (
   baseTokenProgram = baseMintAccountData.programAddress;
 
   // Get latest blockhash
-  const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
+  const { value: latestBlockhash } = await connection.rpc
+    .getLatestBlockhash()
+    .send();
 
   // Determine user's ATA address for the token
   const userBaseAta = await getAssociatedTokenAccountAddress(
@@ -97,7 +108,7 @@ export const pumpswapSwap = async (
     TOKEN_PROGRAM_ADDRESS
   );
 
-  console.log('User base ata: ', userBaseAta);
+  console.log("User base ata: ", userBaseAta);
 
   // Determine user's ATA address for the token
   const userQuoteAta = await getAssociatedTokenAccountAddress(
@@ -111,39 +122,42 @@ export const pumpswapSwap = async (
   const protocolFeeRecipient = globalConfigData.protocol_fee_recipients[1];
 
   // Get the token account for the fee recipient
-  const protocolFeeRecipientTokenAccount = await getProtocolFeeRecipientTokenAccount(
-    address(protocolFeeRecipient.toString()),
-    address(quoteTokenProgram),
-    quoteMintAddress
-  );
+  const protocolFeeRecipientTokenAccount =
+    await getProtocolFeeRecipientTokenAccount(
+      address(protocolFeeRecipient.toString()),
+      address(quoteTokenProgram),
+      quoteMintAddress
+    );
 
   let pool, data: Uint8Array;
 
   // Calculate base token output with slippage and get pool data
-  const { success, message, poolData, amountRaw, tokensEstimate, minimumAmountOut } =
-    await getEstimatedAmountOut(
-      buy,
-      connection,
-      baseMintAddress,
-      quoteMintAddress,
-      amount,
-      slippage
-    );
+  const results = await getEstimatedAmountOut(
+    buy,
+    connection,
+    baseMintAddress,
+    quoteMintAddress,
+    amount,
+    slippage
+  );
 
-  // Validate response from getBaseEstimatedAmountOut function
-  if (!success || amountRaw == undefined) {
-    console.log('Response from esitmatePumpfunMinTokensOut success was false.');
-    return { success, message, data: poolData };
+  // Check if call was succuessful and throw error
+  if (!results.success) {
+    throw results.value;
   }
 
   // Format the instruction data
   if (buy) {
     data = formatPumpswapBuyData(minimumAmountOut, amountRaw);
-    pool = poolData;
   } else {
     data = formatPumpswapSellData(amountRaw, minimumAmountOut);
   }
 
+  if (buy) {
+    data = formatPumpswapBuyData(0n, 0n);
+  } else {
+    data = formatPumpswapSellData(0n, 0n);
+  }
   // Instruction to get or create the user base ATA
   const userBaseAtaIx = getCreateAssociatedTokenIdempotentInstruction({
     mint: baseMintAddress,
@@ -191,12 +205,12 @@ export const pumpswapSwap = async (
     }
   );
 
-  // Buy instruction for PumpSwap
+  // Swap instruction for PumpSwap
   const swapIx: IInstruction = {
     programAddress: address(PUMPSWAP_PROGRAM_ID),
     accounts: [
       {
-        address: address(poolData.pumpPoolPda.toString()), // Pool
+        address: address(raw.pumpPoolPda.toString()), // Pool
         role: AccountRole.READONLY,
       },
       {
@@ -271,10 +285,7 @@ export const pumpswapSwap = async (
   let tx, signedTransaction;
 
   // If using SOL for the buy we need to send the SOL and convert it to WSOL for the buy tx to process it then we clean up
-  // Otherwise the quote token will already be in the quoteAta and no need to do any transfers
-  if (quoteMint == 'So11111111111111111111111111111111111111112' && buy) {
-    console.log('****   BUYING   *****');
-
+  if (quoteMint == "So11111111111111111111111111111111111111112" && buy) {
     instructions.push(
       userQuoteAtaIx,
       userBaseAtaIx,
@@ -283,10 +294,13 @@ export const pumpswapSwap = async (
       swapIx,
       closeAccountIx
     );
-  } else if (quoteMint == 'So11111111111111111111111111111111111111112' && !buy) {
-    console.log('****   SELLING   *****');
-
+    // If we are selling for SOL we need to close the wsol account
+  } else if (
+    quoteMint == "So11111111111111111111111111111111111111112" &&
+    !buy
+  ) {
     instructions.push(userQuoteAtaIx, userBaseAtaIx, swapIx, closeAccountIx);
+    // Otherwise the quote token will already be in the quoteAta and no need to do any transfers
   } else {
     instructions.push(userBaseAtaIx, userQuoteAtaIx, swapIx);
   }
@@ -296,7 +310,7 @@ export const pumpswapSwap = async (
     // Unoptomised tx
     tx = createTransaction({
       feePayer: signer,
-      version: 'legacy',
+      version: "legacy",
       instructions,
       latestBlockhash,
       computeUnitLimit,
@@ -306,12 +320,15 @@ export const pumpswapSwap = async (
     signedTransaction = await signTransactionMessageWithSigners(tx);
 
     // Use signed transaction to get priority fee
-    const priorityFeeEstimate: number = await getPriorityFees(rpcUrl, signedTransaction);
+    const priorityFeeEstimate: number = await getPriorityFees(
+      rpcUrl,
+      signedTransaction
+    );
 
     // The final optomised tx
     tx = createTransaction({
       feePayer: signer,
-      version: 'legacy',
+      version: "legacy",
       instructions,
       latestBlockhash,
       computeUnitLimit,
@@ -321,7 +338,7 @@ export const pumpswapSwap = async (
     // Use default values or values user passed for computeUnitLimit and computeUnitPrice
     tx = createTransaction({
       feePayer: signer,
-      version: 'legacy',
+      version: "legacy",
       instructions,
       latestBlockhash,
       computeUnitLimit,
@@ -337,11 +354,13 @@ export const pumpswapSwap = async (
     transaction: getSignatureFromTransaction(signedTransaction),
   });
 
-  console.log('| SWAP | Transaction Explorer Link:\n', explorerLink);
+  console.log("| PUMPSWAP | Transaction Explorer Link:\n", explorerLink);
 
   // Send and confirm the transaction or return the error
   try {
-    const signature = await connection.sendAndConfirmTransaction(signedTransaction);
+    const signature = await connection.sendAndConfirmTransaction(
+      signedTransaction
+    );
     return {
       success: true,
       data: {
@@ -352,7 +371,7 @@ export const pumpswapSwap = async (
   } catch (error) {
     return {
       success: false,
-      message: 'There was an error with the sendAndConfirmTransaction',
+      message: "There was an error with the sendAndConfirmTransaction",
       data: { error, explorerLink },
     };
   }
@@ -363,16 +382,19 @@ export const pumpswapSwap = async (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpswapBuyData(minBaseAmountOut: any, maxQuoteAmountIn: any) {
+export function formatPumpswapBuyData(
+  minBaseAmountOut: bigint,
+  maxQuoteAmountIn: bigint
+) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
   // Write the discriminator for the 'buy' instruction
-  dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
+  dataBuffer.write("66063d1201daebea", "hex"); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(minBaseAmountOut), 8);
-  dataBuffer.writeBigInt64LE(BigInt(maxQuoteAmountIn), 16);
+  dataBuffer.writeBigUInt64LE(minBaseAmountOut, 8);
+  dataBuffer.writeBigInt64LE(maxQuoteAmountIn, 16);
 
   return new Uint8Array(dataBuffer);
 }
@@ -382,16 +404,19 @@ export function formatPumpswapBuyData(minBaseAmountOut: any, maxQuoteAmountIn: a
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpswapSellData(maxBaseAmountIn: any, minQuoteAmounOut: any) {
+export function formatPumpswapSellData(
+  maxBaseAmountIn: bigint,
+  minQuoteAmounOut: bigint
+) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
   // Write the discriminator for the 'buy' instruction
-  dataBuffer.write('33e685a4017f83ad', 'hex'); // Anchor discriminator for 'buy'
+  dataBuffer.write("33e685a4017f83ad", "hex"); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(maxBaseAmountIn), 8);
-  dataBuffer.writeBigInt64LE(BigInt(minQuoteAmounOut), 16);
+  dataBuffer.writeBigUInt64LE(maxBaseAmountIn, 8);
+  dataBuffer.writeBigInt64LE(minQuoteAmounOut, 16);
 
   return new Uint8Array(dataBuffer);
 }

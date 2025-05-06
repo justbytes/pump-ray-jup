@@ -5,8 +5,8 @@
   "main": "index.ts",
   "scripts": {
     "build": "tsc --noEmit && esrun esbuild.config.js",
-    "dev": "esrun src/index.ts",
-    "start": "esrun dist/bundle.js"
+    "dev": "npx esrun index.ts",
+    "start": "npx esrun dist/bundle.js"
   },
   "keywords": [],
   "author": "justbytes",
