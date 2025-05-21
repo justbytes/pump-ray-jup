@@ -33,8 +33,8 @@ export type SwapResponse = {
   data?: Object;
 };
 
-// global.__GILL_DEBUG__ = true;
-// global.__GILL_DEBUG_LEVEL__ = 'debug';
+global.__GILL_DEBUG__ = true;
+global.__GILL_DEBUG_LEVEL__ = 'debug';
 
 /**
  * Buys a token from pumpfun with a given sol amount and a slippage tolerance
@@ -88,8 +88,6 @@ export const pumpfunBuy = async (
 
   // Get latest blockhash
   const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
-
-  console.log(latestBlockhash);
 
   // Get the user's ATA for the token
   const userAta = await getAssociatedTokenAccountAddress(

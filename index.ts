@@ -1,37 +1,18 @@
 import dotenv from 'dotenv';
-import {
-  Address,
-  address,
-  createSolanaClient,
-  createSolanaRpc,
-  KeyPairSigner,
-  SolanaClient,
-} from 'gill';
+import { createSolanaClient, KeyPairSigner, SolanaClient } from 'gill';
 import { loadKeypairSignerFromFile } from 'gill/node';
 
+// Swaping functions
 import { pumpfunBuy } from './src/pump/pumpfun/pumpfunBuy';
 import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
-import { getBondingCurveData, getPumpfunPrice } from './src/pump/pumpfun/pumpfunBondingCurve';
-
 import { pumpswapSwap } from './src/pump/pumpswap/pumpswapSwap';
-import {
-  fetchMint,
-  getAssociatedTokenAccountAddress,
-  getSyncNativeInstruction,
-  TOKEN_PROGRAM_ADDRESS,
-} from 'gill/programs/token';
-import { getGlobalData } from './src/pump/pumpfun/pumpfunGlobal';
-import {
-  getGlobalConfigData,
-  getProtocolFeeRecipientTokenAccount,
-} from './src/pump/pumpswap/pumpswapGlobalConfig';
-import {
-  getEstimatedAmountOut,
-  getPumpPoolAuthorityPda,
-  getPumpPoolPda,
-} from './src/pump/pumpswap/pumpswapPool';
 
 dotenv.config();
+
+/**
+ * Eample usage / testing grounds
+ * Below shows some examples of how to use the pumpfun/pumpswap buy and sell functions
+ */
 
 async function main() {
   // Creates connection to Solana
@@ -42,22 +23,27 @@ async function main() {
   // Load signer from config
   const signer: KeyPairSigner = await loadKeypairSignerFromFile();
 
-  const testBondingCurveMintAddress = 'BuWEZfRc1vQFhTf7dVUeaia62ZTe6g9rSo1vkBqipump';
+  // Example token from pump
+  let targetAddress = 'GuEhGYBW3DjfoESa5z6eQs2uoauQdP62QDotHzMppump';
 
-  // // Test PumpFun buy
-  // let response = await pumpfunBuy(
-  //   testBondingCurveMintAddress,
-  //   solAmount,
-  //   slippage,
-  //   signer,
-  //   connection,
-  //   process.env.HELIUS_URL?.toString()
-  // );
-  // console.log('Buy transaction response', response);
+  let solAmount = 0.0001;
+  let tokenAmount = 10;
+  const slippage = 0.01; // 1% slippage
+
+  // Test PumpFun buy
+  let response = await pumpfunBuy(
+    targetAddress,
+    solAmount,
+    slippage,
+    signer,
+    connection,
+    process.env.HELIUS_URL?.toString()
+  );
+  console.log('Buy transaction response', response);
 
   // // Test PumpFun sell
   // response = await pumpfunSell(
-  //   testBondingCurveMintAddress,
+  //   targetAddress,
   //   tokenAmount,
   //   slippage,
   //   signer,
@@ -65,26 +51,25 @@ async function main() {
   //   process.env.HELIUS_URL?.toString()
   // );
 
-  // console.log('Sell transaction response', response);
+  console.log('Sell transaction response', response);
 
-  const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
-  const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
-  const slippage = 0.01; // 1% slippage
-  const amount = 1; // Buy 0.0001 sol worth
+  // const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
+  // const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
+  // const amount = 1; // Amount to swap of tokens to swap
 
-  // Test PumpSwap buy
-  let response = await pumpswapSwap(
-    base,
-    quote,
-    amount,
-    slippage,
-    false, // buy = true | sell = false
-    signer,
-    connection,
-    process.env.HELIUS_URL?.toString()
-  );
-
-  console.log(response);
+  // // Test PumpSwap swap
+  // // set 5th param to true if you want to buy the base using quote tokens
+  // // set 5th param to false if you want to sell the base for quote tokens
+  // response = await pumpswapSwap(
+  //   base,
+  //   quote,
+  //   amount,
+  //   slippage,
+  //   false, // buy = true | sell = false
+  //   signer,
+  //   connection,
+  //   process.env.HELIUS_URL?.toString()
+  // );
 }
 
 main();
