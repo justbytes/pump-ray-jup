@@ -1,18 +1,23 @@
 {
-  "name": "swaracle",
+  "name": "pumprayjup",
   "version": "0.1.0",
-  "description": "The ultimate token swap oracle built for Solana",
+  "description": "pumprayjup finds the best quote then uses that dex for the swap",
   "main": "index.ts",
+  "keywords": [
+    "pumpfun",
+    "jupiter",
+    "pumpswap",
+    "raydium"
+  ],
+  "author": "bytes",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.6.4",
   "scripts": {
     "build": "tsc --noEmit && esrun esbuild.config.js",
     "dev": "npx esrun index.ts",
     "start": "npx esrun dist/bundle.js"
   },
-  "keywords": [],
-  "author": "justbytes",
-  "license": "MIT",
-  "type": "module",
-  "packageManager": "pnpm@10.6.4",
   "dependencies": {
     "@coral-xyz/borsh": "^0.31.1",
     "@solana-program/system": "^0.7.0",

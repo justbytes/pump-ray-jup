@@ -15,22 +15,26 @@ dotenv.config();
  */
 
 async function main() {
-  // Creates connection to Solana
+  // Creates connection to Solana with helius endpoint or you can switch it to the public rpc url
   const connection: SolanaClient<string> = createSolanaClient({
     urlOrMoniker: `${process.env.HELIUS_URL}`,
   });
 
-  // Load signer from config
+  // Load default signer from config
   const signer: KeyPairSigner = await loadKeypairSignerFromFile();
 
-  // Example token from pump
-  let targetAddress = 'GuEhGYBW3DjfoESa5z6eQs2uoauQdP62QDotHzMppump';
+  /**
+   * PUMPFUN BUY/SELL example
+   * The following functions are used to trade pumpfun tokens on the bonding curve
+   */
 
+  // Configure swap params
+  let targetAddress = '4HjZK46JnBfn7wzEhMutM5kipREUebe7ZGvCurbFpump'; // Token off the curve
   let solAmount = 0.0001;
-  let tokenAmount = 10;
+  let tokenAmount = 1;
   const slippage = 0.01; // 1% slippage
 
-  // Test PumpFun buy
+  // PumpFun buy
   let response = await pumpfunBuy(
     targetAddress,
     solAmount,
@@ -39,9 +43,10 @@ async function main() {
     connection,
     process.env.HELIUS_URL?.toString()
   );
+
   console.log('Buy transaction response', response);
 
-  // // Test PumpFun sell
+  // PumpFun sell
   // response = await pumpfunSell(
   //   targetAddress,
   //   tokenAmount,
@@ -51,25 +56,33 @@ async function main() {
   //   process.env.HELIUS_URL?.toString()
   // );
 
-  console.log('Sell transaction response', response);
+  // console.log('Sell transaction response', response);
 
-  // const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
-  // const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
-  // const amount = 1; // Amount to swap of tokens to swap
+  /**
+   * PUMPSWAP BUY/SELL
+   * To swap with pumpswap dex you only need to import one function and then set the buying to true
+   * or false for the direction you want to swap with
+   */
 
-  // // Test PumpSwap swap
-  // // set 5th param to true if you want to buy the base using quote tokens
-  // // set 5th param to false if you want to sell the base for quote tokens
-  // response = await pumpswapSwap(
-  //   base,
-  //   quote,
-  //   amount,
-  //   slippage,
-  //   false, // buy = true | sell = false
-  //   signer,
-  //   connection,
-  //   process.env.HELIUS_URL?.toString()
-  // );
+  // Configure pumpswap params for a pumpfun tokens off the bonding curve
+  const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
+  const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
+  const amount = 1; // Amount to swap of tokens to swap
+
+  // Test PumpSwap swap
+  // set 5th param to true if you want to buy the base using quote tokens
+  // set 5th param to false if you want to sell the base for quote tokens
+
+  //   response = await pumpswapSwap(
+  //     base,
+  //     quote,
+  //     amount,
+  //     slippage,
+  //     false, // buy = true || sell = false
+  //     signer,
+  //     connection,
+  //     process.env.HELIUS_URL?.toString()
+  //   );
 }
 
 main();
