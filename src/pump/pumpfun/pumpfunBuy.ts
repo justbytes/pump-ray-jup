@@ -18,12 +18,7 @@ import {
 } from 'gill/programs/token';
 
 // Local Imports
-import {
-  PUMPFUN_EVENT_AUTHORITY,
-  PUMPFUN_GLOBAL,
-  PUMPFUN_PROGRAM_ID,
-  SYSVAR_RENT,
-} from '../constants';
+import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../constants';
 import { getGlobalData } from './pumpfunGlobal';
 import { estimatePumpfunMinTokensOut } from './pumpfunBondingCurve';
 import { getPriorityFees } from '../../helpers/helpers';
@@ -35,8 +30,8 @@ export type SwapResponse = {
   data?: Object;
 };
 
-global.__GILL_DEBUG__ = true;
-global.__GILL_DEBUG_LEVEL__ = 'debug';
+// global.__GILL_DEBUG__ = true;
+// global.__GILL_DEBUG_LEVEL__ = 'debug';
 
 /**
  * Buys a token from pumpfun with a given sol amount and a slippage tolerance

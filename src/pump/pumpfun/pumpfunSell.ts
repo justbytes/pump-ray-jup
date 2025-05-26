@@ -2,7 +2,9 @@ import {
   AccountRole,
   address,
   createTransaction,
+  getAddressEncoder,
   getExplorerLink,
+  getProgramDerivedAddress,
   getSignatureFromTransaction,
   IInstruction,
   KeyPairSigner,
@@ -10,7 +12,6 @@ import {
 } from 'gill';
 import { SYSTEM_PROGRAM_ADDRESS } from 'gill/programs';
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   getAssociatedTokenAccountAddress,
   getCreateAssociatedTokenIdempotentInstruction,
   TOKEN_PROGRAM_ADDRESS,
@@ -54,8 +55,6 @@ export const pumpfunSell = async (
   computeUnitLimit?: number,
   computeUnitPrice?: number
 ) => {
-  // console.log(`Selling tokens with ${tokenAmount} SOL and ${slippage * 100}% slippage`);
-
   // Validate inputs
   if (tokenAmount <= 0) {
     return {
@@ -105,7 +104,7 @@ export const pumpfunSell = async (
   const globalData = await getGlobalData(connection);
 
   // Convert SOL to lamports
-  const tokenAmountInDecimals = tokenAmount * 1e6;
+  const tokenAmountInDecimals = BigInt(tokenAmount * 1e6);
 
   // Calculate token output with slippage
   const { success, message, bondingCurveData, estimatedAmountOut, minimumAmountOut } =
@@ -115,6 +114,11 @@ export const pumpfunSell = async (
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
     return { success, message, data: bondingCurveData };
   }
+
+  const [creatorVault, _creatorVaultBump] = await getProgramDerivedAddress({
+    seeds: ['creator-vault', getAddressEncoder().encode(bondingCurveData.data.creator.toString())],
+    programAddress: address(PUMPFUN_PROGRAM_ID),
+  });
 
   // Format the instruction data
   const data: Uint8Array = formatPumpfunSellData(minimumAmountOut, tokenAmountInDecimals);
@@ -156,8 +160,8 @@ export const pumpfunSell = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(ASSOCIATED_TOKEN_PROGRAM_ADDRESS), // Associate Token Program
-        role: AccountRole.READONLY,
+        address: creatorVault, // Creator Vault
+        role: AccountRole.WRITABLE,
       },
       {
         address: address(TOKEN_PROGRAM_ADDRESS), // Token program
@@ -247,7 +251,7 @@ export const pumpfunSell = async (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpfunSellData(minSolAmount: number, maxTokensToSpend: number) {
+export function formatPumpfunSellData(minSolAmount: bigint, maxTokensToSpend: bigint) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
@@ -255,7 +259,7 @@ export function formatPumpfunSellData(minSolAmount: number, maxTokensToSpend: nu
   dataBuffer.write('33e685a4017f83ad', 'hex'); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(maxTokensToSpend), 8); // amount to sell
-  dataBuffer.writeBigInt64LE(BigInt(minSolAmount), 16);
+  dataBuffer.writeBigUInt64LE(maxTokensToSpend, 8); // amount to sell
+  dataBuffer.writeBigInt64LE(minSolAmount, 16);
   return new Uint8Array(dataBuffer);
 }
