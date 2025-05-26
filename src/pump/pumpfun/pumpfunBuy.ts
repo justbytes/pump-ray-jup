@@ -2,7 +2,9 @@ import {
   AccountRole,
   address,
   createTransaction,
+  getAddressEncoder,
   getExplorerLink,
+  getProgramDerivedAddress,
   getSignatureFromTransaction,
   IInstruction,
   KeyPairSigner,
@@ -106,10 +108,11 @@ export const pumpfunBuy = async (
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
+  // Get the global data
   const globalData = await getGlobalData(connection);
 
-  // Convert SOL to lamports
-  const solAmountLamports = solAmount * 1e9;
+  // Convert SOL to lamports and then into BigInt
+  const solAmountLamports = BigInt(solAmount * 1e9);
 
   // Calculate token output with slippage
   const { success, message, bondingCurveData, estimatedAmountOut, minimumAmountOut } =
@@ -119,6 +122,11 @@ export const pumpfunBuy = async (
     console.log('Response from esitmatePumpfunMinTokensOut success was false.');
     return { success, message, data: bondingCurveData };
   }
+
+  const [creatorVault, _creatorVaultBump] = await getProgramDerivedAddress({
+    seeds: ['creator-vault', getAddressEncoder().encode(bondingCurveData.data.creator.toString())],
+    programAddress: address(PUMPFUN_PROGRAM_ID),
+  });
 
   // Format the instruction data
   const data: Uint8Array = formatPumpfunBuyData(minimumAmountOut, solAmountLamports);
@@ -164,8 +172,8 @@ export const pumpfunBuy = async (
         role: AccountRole.READONLY,
       },
       {
-        address: address(SYSVAR_RENT), // Sysvar Rent
-        role: AccountRole.READONLY,
+        address: creatorVault, // Creator Vault
+        role: AccountRole.WRITABLE,
       },
       {
         address: address(PUMPFUN_EVENT_AUTHORITY), // Event authority
@@ -251,7 +259,7 @@ export const pumpfunBuy = async (
  * @param {number} minTokenAmount Minimum amount of tokens to receive
  * @param {number} maxSolToSpend Maximum amount of SOL to spend
  */
-export function formatPumpfunBuyData(minTokenAmount: number, maxSolToSpend: number) {
+export function formatPumpfunBuyData(minTokenAmount: bigint, maxSolToSpend: bigint) {
   // Create the data buffer
   const dataBuffer = Buffer.alloc(24);
 
@@ -259,8 +267,8 @@ export function formatPumpfunBuyData(minTokenAmount: number, maxSolToSpend: numb
   dataBuffer.write('66063d1201daebea', 'hex'); // Anchor discriminator for 'buy'
 
   // Write the amounts to the buffer
-  dataBuffer.writeBigUInt64LE(BigInt(minTokenAmount), 8);
-  dataBuffer.writeBigInt64LE(BigInt(maxSolToSpend), 16);
+  dataBuffer.writeBigUInt64LE(minTokenAmount, 8);
+  dataBuffer.writeBigInt64LE(maxSolToSpend, 16);
 
   return new Uint8Array(dataBuffer);
 }

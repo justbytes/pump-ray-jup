@@ -5,8 +5,21 @@ import {
   getProgramDerivedAddress,
   LAMPORTS_PER_SOL,
 } from 'gill';
+import * as borsh from '@coral-xyz/borsh';
 import { PUMPFUN_PROGRAM_ID } from '../constants';
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from 'gill/programs/token';
+
+// Structure of the Bonding curve data
+export const bondingCurveSchema = borsh.struct([
+  borsh.array(borsh.u8(), 8, 'discriminator'),
+  borsh.u64('virtualTokenReserves'),
+  borsh.u64('virtualSolReserves'),
+  borsh.u64('realTokenReserves'),
+  borsh.u64('realSolReserves'),
+  borsh.u64('tokenTotalSupply'),
+  borsh.bool('complete'),
+  borsh.publicKey('creator'),
+]);
 
 /**
  * Gets the state of a bonding curve
@@ -35,7 +48,7 @@ export const getBondingCurveData = async (mint: Address, connection: any) => {
   const dataBuffer = Buffer.from(base64Data, 'base64');
 
   // Decode the bonding curve account data
-  const bondingCurveData = decodeBondingCurveAccount(dataBuffer);
+  const bondingCurveData = bondingCurveSchema.decode(dataBuffer);
 
   return {
     address: bondingCurve,
@@ -67,16 +80,6 @@ export const decodeBondingCurveAccount = (buffer: Buffer) => {
 
   // Boolean field (1 byte)
   const complete = buffer[48] === 1;
-
-  // Log the values for debugging
-  // console.log('=== Bonding Curve Raw Values ===');
-  // console.log('Discriminator (hex):', discriminator.toString('hex'));
-  // console.log('virtualTokenReserves:', virtualTokenReserves.toString());
-  // console.log('virtualSolReserves:', virtualSolReserves.toString());
-  // console.log('realTokenReserves:', realTokenReserves.toString());
-  // console.log('realSolReserves:', realSolReserves.toString());
-  // console.log('tokenTotalSupply:', tokenTotalSupply.toString());
-  // console.log('complete:', complete);
 
   return {
     discriminator: discriminator.toString('hex'),
@@ -139,7 +142,7 @@ export const getPumpfunPrice = async (mint: string, connection: any) => {
 export const estimatePumpfunMinTokensOut = async (
   mint: Address,
   connection: any,
-  solAmount: number,
+  solAmount: bigint,
   slippage: number
 ) => {
   // Get bonding curve data
@@ -147,8 +150,8 @@ export const estimatePumpfunMinTokensOut = async (
 
   // Convert BigInts to Numbers for calculation
   // Note: This could lose precision for very large numbers
-  const virtualTokenReserves = Number(bondingCurveData.data.virtualTokenReserves);
-  const virtualSolReserves = Number(bondingCurveData.data.virtualSolReserves);
+  const virtualTokenReserves = BigInt(bondingCurveData.data.virtualTokenReserves.toString());
+  const virtualSolReserves = BigInt(bondingCurveData.data.virtualSolReserves.toString());
   const complete = Boolean(bondingCurveData.data.complete);
 
   if (complete) {
@@ -157,8 +160,8 @@ export const estimatePumpfunMinTokensOut = async (
       message:
         " Token isn't trading on the the bonding curve please use pumpswapMinAmountOut(mint, connection)",
       bondingCurveData,
-      estimatedAmountOut: 0,
-      minimumAmountOut: 0,
+      estimatedAmountOut: 0n,
+      minimumAmountOut: 0n,
     };
   }
 
@@ -175,16 +178,23 @@ export const estimatePumpfunMinTokensOut = async (
   const tokensReceived = virtualTokenReserves - newVirtualTokenReserves;
 
   // Apply fee (PumpFun charges a 1% fee for buying/selling on the bonding curve)
-  const feeBasisPoints = 100; // 1% = 100 basis points
-  const feeFactor = 1 - feeBasisPoints / 10000;
-  const tokensAfterFee = tokensReceived * feeFactor;
+  const feeBasisPoints = 100n; // 1% = 100 basis points
+  const feeFactorNumerator = 10000n - feeBasisPoints;
+  const feeFactorDenominator = 10000n;
+  const tokensAfterFee = (tokensReceived * feeFactorNumerator) / feeFactorDenominator;
+
+  const slippageBigInt = BigInt(Math.floor(slippage * 10000)) * 100n; // Convert to basis points (e.g., 0.01 -> 100 basis points)
+  const slippageFactorNumerator = 1000000n - slippageBigInt;
+  const slippageFactorDenominator = 1000000n;
+
+  const minAmountOut = (tokensAfterFee * slippageFactorNumerator) / slippageFactorDenominator;
 
   // Return the estimated amount out and the amount with the slippage
   return {
     success: true,
     bondingCurveData,
-    estimatedAmountOut: Math.floor(tokensAfterFee),
-    minimumAmountOut: Math.floor(tokensAfterFee * (1 - slippage)),
+    estimatedAmountOut: tokensAfterFee,
+    minimumAmountOut: minAmountOut,
   };
 };
 
@@ -240,3 +250,38 @@ export const estimatePumpfunMinSolOut = async (
     minimumAmountOut: Math.floor(tokensAfterFee * (1 - slippage)),
   };
 };
+
+/**
+ * An example of how to decode the bytes data
+ * Bonding curve decoding function with detailed debugging
+ * @param {Buffer} buffer The binary buffer containing the account data
+ */
+// export const decodeBondingCurveAccount = (buffer: Buffer) => {
+//   if (buffer.length < 49) {
+//     console.error('Buffer too small for bonding curve data:', buffer.length);
+//     throw new Error('Buffer too small to contain bonding curve data');
+//   }
+
+//   // First 8 bytes are the Anchor discriminator
+//   const discriminator = buffer.slice(0, 8);
+
+//   // Read the u64 fields (8 bytes each, little-endian)
+//   const virtualTokenReserves = buffer.readBigUInt64LE(8);
+//   const virtualSolReserves = buffer.readBigUInt64LE(16);
+//   const realTokenReserves = buffer.readBigUInt64LE(24);
+//   const realSolReserves = buffer.readBigUInt64LE(32);
+//   const tokenTotalSupply = buffer.readBigUInt64LE(40);
+
+//   // Boolean field (1 byte)
+//   const complete = buffer[48] === 1;
+
+//   return {
+//     discriminator: discriminator.toString('hex'),
+//     virtualTokenReserves,
+//     virtualSolReserves,
+//     realTokenReserves,
+//     realSolReserves,
+//     tokenTotalSupply,
+//     complete,
+//   };
+// };

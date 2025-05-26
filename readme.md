@@ -4,7 +4,7 @@ An API that makes swaping tokens on pumpfun, pumpswap, jupiter, and raydium exch
 
 ## Current state
 
-- PumpFun: ✅ - Currently implementing creator fee change so this one is broken atm.
+- PumpFun: ✅
 - PumpSwap: ✅
 - Raydium: In progress
 - Jupiter: In progress
