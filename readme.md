@@ -28,6 +28,8 @@ pnpm dev
 
 ## Usage
 
+See `index.ts` for the full examples.
+
 ### PUMPFUN BUY
 
 ```
