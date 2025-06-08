@@ -1,3 +1,5 @@
+![pump ray jup banner](/assets/pumprayjup_banner.png)
+
 # Overview
 
 An API that makes swaping tokens on pumpfun, pumpswap, jupiter, and raydium exchanges all possible via a single function call. The function gets a quote from each exchange and then performs the optimal swap. Each exchange has its own set of exportable funtions in the case you want to use a specific exchange.
@@ -42,6 +44,7 @@ let response = await pumpfunBuy(
 ```
 
 ### PUMPFUN SELL
+
 ```
   let response = await pumpfunSell(
     targetAddress,
@@ -54,6 +57,7 @@ let response = await pumpfunBuy(
 ```
 
 ### PUMPSWAP BUY/SELL
+
 ```
 let response = await pumpswapSwap(
       base,
