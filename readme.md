@@ -30,6 +30,11 @@ pnpm dev
 
 ## Usage
 
+See `index.ts` for the full examples.
+
+### SOLANA CLI WALLET
+#### Ensure that you have the Solana CLI installed on your machine and ensure it is configured for mainnet and has a SOL balance.
+
 ### PUMPFUN BUY
 
 ```
