@@ -20,7 +20,7 @@ import {
 } from 'gill/programs/token';
 import { getEstimatedAmountOut } from './pumpswapPool';
 import { getPriorityFees } from '../../helpers/helpers';
-import { PUMPSWAP_PROGRAM_ID } from '../constants';
+import { PUMPSWAP_PROGRAM_ID } from '../../constants';
 import { getGlobalConfigData, getProtocolFeeRecipientTokenAccount } from './pumpswapGlobalConfig';
 import { pumpAmmEventAuthorityPda } from './utils';
 import { EstimateResult } from './types';

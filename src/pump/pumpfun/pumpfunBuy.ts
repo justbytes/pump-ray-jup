@@ -18,7 +18,7 @@ import {
 } from 'gill/programs/token';
 
 // Local Imports
-import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../constants';
+import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../../constants';
 import { getGlobalData } from './pumpfunGlobal';
 import { estimatePumpfunMinTokensOut } from './pumpfunBondingCurve';
 import { getPriorityFees } from '../../helpers/helpers';
@@ -55,8 +55,6 @@ export const pumpfunBuy = async (
   computeUnitLimit?: number,
   computeUnitPrice?: number
 ) => {
-  // console.log(`Buying tokens with ${solAmount} SOL and ${slippage * 100}% slippage`);
-
   // Validate inputs
   if (solAmount <= 0) {
     return {
@@ -118,6 +116,7 @@ export const pumpfunBuy = async (
     return { success, message, data: bondingCurveData };
   }
 
+  // Creater vaults for collecting trading fees
   const [creatorVault, _creatorVaultBump] = await getProgramDerivedAddress({
     seeds: ['creator-vault', getAddressEncoder().encode(bondingCurveData.data.creator.toString())],
     programAddress: address(PUMPFUN_PROGRAM_ID),

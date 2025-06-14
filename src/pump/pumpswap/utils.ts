@@ -1,5 +1,5 @@
 import { address, getProgramDerivedAddress } from 'gill';
-import { PUMPSWAP_PROGRAM_ID } from '../constants';
+import { PUMPSWAP_PROGRAM_ID } from '../../constants';
 
 export async function pumpAmmEventAuthorityPda() {
   const [eventAuthorityPda, _eventAuthorityBump] = await getProgramDerivedAddress({

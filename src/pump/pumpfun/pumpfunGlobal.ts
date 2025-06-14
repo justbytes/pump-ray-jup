@@ -1,5 +1,5 @@
 import { address, getProgramDerivedAddress } from 'gill';
-import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../constants';
+import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../../constants';
 import * as borsh from '@coral-xyz/borsh';
 
 export const globalSchema = borsh.struct([

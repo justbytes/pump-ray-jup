@@ -1,6 +1,6 @@
 import * as borsh from '@coral-xyz/borsh';
 import { Address, address, getAddressEncoder, getProgramDerivedAddress } from 'gill';
-import { PUMPSWAP_PROGRAM_ID } from '../constants';
+import { PUMPSWAP_PROGRAM_ID } from '../../constants';
 
 // Structure of the Pool
 export const globalConfigSchema = borsh.struct([

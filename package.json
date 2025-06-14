@@ -15,13 +15,15 @@
   "packageManager": "pnpm@10.6.4",
   "scripts": {
     "build": "tsc --noEmit && esrun esbuild.config.js",
-    "dev": "npx esrun index.ts",
-    "start": "npx esrun dist/bundle.js"
+    "dev": "npx esrun index.ts"
   },
   "dependencies": {
     "@coral-xyz/borsh": "^0.31.1",
+    "@raydium-io/raydium-sdk-v2": "0.1.139-alpha",
     "@solana-program/system": "^0.7.0",
     "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.2",
+    "axios": "^1.9.0",
     "bn.js": "^5.2.2",
     "bs58": "^6.0.0",
     "dotenv": "^16.5.0",
