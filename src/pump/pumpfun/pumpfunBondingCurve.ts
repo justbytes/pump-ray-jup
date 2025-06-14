@@ -6,7 +6,7 @@ import {
   LAMPORTS_PER_SOL,
 } from 'gill';
 import * as borsh from '@coral-xyz/borsh';
-import { PUMPFUN_PROGRAM_ID } from '../constants';
+import { PUMPFUN_PROGRAM_ID } from '../../constants';
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from 'gill/programs/token';
 
 // Structure of the Bonding curve data
@@ -191,21 +191,14 @@ export const estimatePumpfunMinSolOut = async (
   // Calculate constant product k = virtualTokenReserves * virtualSolReserves
   const k = virtualTokenReserves * virtualSolReserves;
 
+  // New virtual token reserve
   const newVirtualTokenReserves = virtualTokenReserves + tokenAmount;
-
-  // New virtual SOL reserves after purchase: x' = x + dx
-  // const newVirtualSolReserves = virtualSolReserves + solAmount;
 
   // New virtual token reserves to maintain constant product: y' = k / x'
   const newVirtualSolReserves = k / newVirtualTokenReserves;
 
   // Calculate tokens received: dy = y - y'
   const solReceived = virtualSolReserves - newVirtualSolReserves;
-
-  // Apply fee (PumpFun charges a 1% fee for buying/selling on the bonding curve)
-  // const feeBasisPoints = 100; // 1% = 100 basis points
-  // const feeFactor = 1 - feeBasisPoints / 10000;
-  // const tokensAfterFee = solReceived * feeFactor;
 
   // Apply fee (PumpFun charges a 1% fee for buying/selling on the bonding curve)
   const feeBasisPoints = 100n; // 1% = 100 basis points

@@ -1,6 +1,6 @@
 import * as borsh from '@coral-xyz/borsh';
 import { address, Address, getAddressEncoder, getProgramDerivedAddress, SolanaClient } from 'gill';
-import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../constants';
+import { PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID } from '../../constants';
 import BN from 'bn.js';
 import { fetchMint } from 'gill/programs/token';
 import { EstimateResult, PoolData, Result } from './types';

@@ -18,7 +18,7 @@ import {
 } from 'gill/programs/token';
 
 // Local Imports
-import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../constants';
+import { PUMPFUN_EVENT_AUTHORITY, PUMPFUN_GLOBAL, PUMPFUN_PROGRAM_ID } from '../../constants';
 import { getGlobalData } from './pumpfunGlobal';
 import { estimatePumpfunMinSolOut } from './pumpfunBondingCurve';
 import { getPriorityFees } from '../../helpers/helpers';

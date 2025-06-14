@@ -6,6 +6,7 @@ import { loadKeypairSignerFromFile } from 'gill/node';
 import { pumpfunBuy } from './src/pump/pumpfun/pumpfunBuy';
 import { pumpfunSell } from './src/pump/pumpfun/pumpfunSell';
 import { pumpswapSwap } from './src/pump/pumpswap/pumpswapSwap';
+import { raydiumBuy } from './src/raydium/raydiumSwap';
 
 dotenv.config();
 
@@ -29,34 +30,47 @@ async function main() {
    */
 
   // Configure swap params
-  let targetAddress = '4HjZK46JnBfn7wzEhMutM5kipREUebe7ZGvCurbFpump'; // Token off the curve
-  let solAmount = 0.0001;
-  let tokenAmount = 3000;
+  const quoteMint = 'BjCmA9ZYwJ1BwusMGaSxe4pgaa9gfXTtdyX27NYEpump';
+  const baseMint = 'So11111111111111111111111111111111111111112';
+
+  let solAmount = 0.001;
+  let tokenAmount = 40;
   const slippage = 0.01; // 1% slippage
 
-  // PumpFun buy
-  let response = await pumpfunBuy(
-    targetAddress,
+  let response = await raydiumBuy(
+    baseMint,
+    quoteMint,
     solAmount,
     slippage,
+    true,
     signer,
     connection,
-    process.env.HELIUS_URL?.toString()
+    `${process.env.HELIUS_URL}`
   );
 
-  console.log('Buy transaction response', response);
+  // PumpFun buy
+  // let response = await pumpfunBuy(
+  //   targetAddress,
+  //   solAmount,
+  //   slippage,
+  //   signer,
+  //   connection,
+  //   process.env.HELIUS_URL?.toString()
+  // );
 
-  // PumpFun sell
-  response = await pumpfunSell(
-    targetAddress,
-    tokenAmount,
-    slippage,
-    signer,
-    connection,
-    process.env.HELIUS_URL?.toString()
-  );
+  // console.log('Buy transaction response', response);
 
-  console.log('Sell transaction response', response);
+  // // PumpFun sell
+  // response = await pumpfunSell(
+  //   targetAddress,
+  //   tokenAmount,
+  //   slippage,
+  //   signer,
+  //   connection,
+  //   process.env.HELIUS_URL?.toString()
+  // );
+
+  // console.log('Sell transaction response', response);
 
   /**
    * PUMPSWAP BUY/SELL
@@ -65,23 +79,23 @@ async function main() {
    */
 
   // Configure pumpswap params for a pumpfun tokens off the bonding curve
-  const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
-  const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
-  const amount = 0.0001; // Amount to swap of tokens to swap
+  // const quote = 'So11111111111111111111111111111111111111112'; // PumpSwap token to buy with
+  // const base = 'GkyPYa7NnCFbduLknCfBfP7p8564X1VZhwZYJ6CZpump'; // PumpSwap token to recieve
+  // const amount = 0.0001; // Amount to swap of tokens to swap
 
   // Test PumpSwap swap
   // set 5th param to true if you want to buy the base using quote tokens
   // set 5th param to false if you want to sell the base for quote tokens
-  response = await pumpswapSwap(
-    base,
-    quote,
-    amount,
-    slippage,
-    true, // buy = true || sell = false
-    signer,
-    connection,
-    process.env.HELIUS_URL?.toString()
-  );
+  // response = await pumpswapSwap(
+  //   base,
+  //   quote,
+  //   amount,
+  //   slippage,
+  //   true, // buy = true || sell = false
+  //   signer,
+  //   connection,
+  //   process.env.HELIUS_URL?.toString()
+  // );
 }
 
 main();
