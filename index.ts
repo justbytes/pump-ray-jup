@@ -48,6 +48,8 @@ async function main() {
     `${process.env.HELIUS_URL}`
   );
 
+  console.log('Response: ', response);
+
   // PumpFun buy
   // let response = await pumpfunBuy(
   //   targetAddress,
