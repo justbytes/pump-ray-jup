@@ -18,7 +18,7 @@ import {
 } from 'gill/programs/token';
 import { getPriorityFees } from '../helpers/helpers';
 import { getAmmSwapIx } from './instructions';
-import { getSwapAccounts } from './pool';
+import { getQuoteAmountOut, getSwapAccounts } from './pool';
 
 // global.__GILL_DEBUG__ = true;
 // global.__GILL_DEBUG_LEVEL__ = 'debug';
@@ -125,21 +125,23 @@ export const raydiumBuy = async (
     signer,
     baseMintAddress,
     quoteMintAddress,
-    userBaseAta,
-    userQuoteAta,
+    userBaseAta: buy ? userBaseAta : userQuoteAta,
+    userQuoteAta: buy ? userQuoteAta : userBaseAta,
     ...swapAccounts,
   };
 
   // Initalize data variable
-  let data: Uint8Array;
+  let data: Uint8Array, swapData: any;
 
   // Get the buy or sell data
   if (buy) {
-    data = formatRaydiumBuyData();
+    swapData = await getQuoteAmountOut(amount, slippage, baseMint, swapAccounts.poolId);
   } else {
-    data = formatRaydiumSellData();
+    swapData = await getQuoteAmountOut(amount, slippage, quoteMint, swapAccounts.poolId);
   }
 
+  if (!swapData) return { success: false, data: null, message: 'Could not get amount out' };
+  data = formatRaydiumSwapData(swapData.maxBaseIn, swapData.minAmountOut);
   // Instruction to get or create the user base ATA
   const userBaseAtaIx = getCreateAssociatedTokenIdempotentInstruction({
     mint: baseMintAddress,
@@ -192,10 +194,16 @@ export const raydiumBuy = async (
 
   let swapIx: IInstruction;
 
+  // TODO: ADD THE CAMM and CLMM swap support
   if (swapAccounts.type == 'amm') {
     // get the ray legacy amm v4 swap accounts
-    console.log('getting legacy amm accounts');
     swapIx = getAmmSwapIx(swapAccountsConfig, data);
+  } else if (swapAccounts.type == 'camm') {
+    console.log('Not yet implemented');
+    return;
+  } else if (swapAccounts.type == 'clmm') {
+    console.log('Not yet implemented');
+    return;
   } else {
     return;
   }
@@ -204,8 +212,6 @@ export const raydiumBuy = async (
 
   // If using SOL for the buy we need to send the SOL and convert it to WSOL for the buy tx to process it then we clean up
   if (baseMint == 'So11111111111111111111111111111111111111112' && buy) {
-    console.log('baseMint sol buy true');
-
     instructions.push(
       userQuoteAtaIx,
       userBaseAtaIx,
@@ -221,8 +227,6 @@ export const raydiumBuy = async (
     instructions.push(userQuoteAtaIx, userBaseAtaIx, swapIx, closeAccountIx);
     // Otherwise the quote token will already be in the quoteAta and no need to do any transfers
   } else {
-    console.log('default');
-
     instructions.push(userBaseAtaIx, userQuoteAtaIx, swapIx);
   }
 
@@ -295,15 +299,27 @@ export const raydiumBuy = async (
 
 // Here we will format the instuction data to a uint8array
 // placeholders for now
-function formatRaydiumBuyData(): Uint8Array {
+export function formatRaydiumSwapData(maxIn: bigint, minOut: bigint): Uint8Array {
+  // Create the data buffer (1 byte discriminator + 8 bytes + 8 bytes = 17 bytes)
   const dataBuffer = Buffer.alloc(17);
 
-  dataBuffer.write('0040420f0000000000a65d1ae000000000', 'hex');
+  // Write the discriminator for Raydium swap instruction
+  dataBuffer.writeUInt8(0x00, 0); // Raydium swap discriminator
+
+  // Write maxBaseIn as 64-bit little-endian at offset 1
+  dataBuffer.writeBigUInt64LE(maxIn, 1);
+
+  // Write minQuoteAmountOut as 64-bit little-endian at offset 9
+  dataBuffer.writeBigUInt64LE(minOut, 9);
 
   return new Uint8Array(dataBuffer);
 }
-function formatRaydiumSellData(): Uint8Array {
-  console.log('Function not implemented.');
-  let data: number = 0;
-  return new Uint8Array(data);
+
+// /Helper function to verify the output matches your expected format
+export function verifyRaydiumData(maxBaseIn: bigint, minQuoteAmountOut: bigint): string {
+  const data = formatRaydiumSwapData(maxBaseIn, minQuoteAmountOut);
+  return Buffer.from(data).toString('hex');
 }
+
+// Test with values:
+// console.log(verifyRaydiumData(1000000n, 3641640127n));

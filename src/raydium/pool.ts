@@ -30,6 +30,19 @@ export async function getPoolDataByMint(mintA: string, mintB: string) {
   return response.data.data;
 }
 
+export async function getPoolDataById(id: string) {
+  // Get token data by mint
+  const response = await axios.get(`https://api-v3.raydium.io/pools/info/ids?ids=${id}`);
+
+  // Return if we didn't get any pools
+  if (!response) {
+    return false;
+  }
+
+  // Return data
+  return response.data.data;
+}
+
 /**
  * Gets the pool id based on which has the highest amount of base token liquidity.
  * baseMint should be a token like sol, wsol, usdt, usdc, etc
@@ -142,3 +155,94 @@ export async function getSwapAccounts(baseMint: string, quoteMint: string) {
       break;
   }
 }
+
+export async function getBaseAmountOut(amount: number, baseMint: string, id: string) {
+  const poolData = await getPoolDataById(id);
+
+  if (!poolData) return null;
+
+  console.log(poolData);
+}
+
+export async function getQuoteAmountOut(
+  baseIn: number,
+  slippageTolerance: number,
+  baseMint: string,
+  id: string
+) {
+  // Get pool data using the pool id
+  const data = await getPoolDataById(id);
+
+  // Return early if no data
+  if (!data) return null;
+
+  // Get the first and only pool by index
+  const poolData = data[0];
+
+  // Initialize variables
+  let baseReserves, quoteReserves, baseDecimals, quoteDecimals;
+  console.log(poolData.mintAmountA);
+
+  // Here we ensure that we know what mintA and mintB are
+  if (poolData.mintA.address == baseMint) {
+    baseReserves = poolData.mintAmountA;
+    quoteReserves = poolData.mintAmountB;
+    baseDecimals = poolData.mintA.decimals;
+    quoteDecimals = poolData.mintB.decimals;
+  } else {
+    baseReserves = poolData.mintAmountB;
+    quoteReserves = poolData.mintAmountA;
+    baseDecimals = poolData.mintB.decimals;
+    quoteDecimals = poolData.mintA.decimals;
+  }
+
+  // Constant product formal get amount out in quote token
+  const k = baseReserves * quoteReserves;
+  const newBaseReserves = baseIn + baseReserves;
+  const newQuoteReserves = k / newBaseReserves;
+
+  const quoteTokensEstimate = quoteReserves - newQuoteReserves;
+
+  // Calculate fee
+  const feeBasisPoints = 25;
+  const feeFactorNumerator = 10000 - feeBasisPoints;
+  const feeFactorDenominator = 10000;
+
+  // Amount of tokens out
+  const tokensAfterFee = (quoteTokensEstimate * feeFactorNumerator) / feeFactorDenominator;
+  console.log(tokensAfterFee);
+
+  // Calculate slippage
+  const slippage = Math.floor(slippageTolerance * 10000) * 100;
+  const slippageFactorNumerator = 1000000 - slippage;
+  const slippageFactorDenominator = 1000000;
+
+  // Min amount out of to recieve
+  const minimumQuoteAmountOut =
+    (tokensAfterFee * slippageFactorNumerator) / slippageFactorDenominator;
+
+  console.log(minimumQuoteAmountOut);
+  // Convert to BigInt for blockchain transactions (accept tiny precision errors)
+  const maxBaseIn = BigInt(Math.floor(baseIn * Math.pow(10, baseDecimals)));
+  const estimatedAmountOutRaw = BigInt(Math.floor(tokensAfterFee * Math.pow(10, quoteDecimals)));
+  const minimumAmountOutRaw = BigInt(
+    Math.floor(minimumQuoteAmountOut * Math.pow(10, quoteDecimals))
+  );
+
+  console.log(maxBaseIn);
+  console.log(estimatedAmountOutRaw);
+  console.log(minimumAmountOutRaw);
+
+  return {
+    maxBaseIn,
+    amountOut: estimatedAmountOutRaw,
+    minAmountOut: minimumAmountOutRaw,
+  };
+}
+
+// getQuoteAmountOut(
+//   0.001,
+//   0.01,
+//   'So11111111111111111111111111111111111111112',
+//   '5AFrQHMgSBxAovKbR3n1fsjmJsEARWzrHzxJJDWhPs6A'
+// );
