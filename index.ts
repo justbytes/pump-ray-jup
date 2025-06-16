@@ -34,15 +34,15 @@ async function main() {
   const baseMint = 'So11111111111111111111111111111111111111112';
 
   let solAmount = 0.001;
-  let tokenAmount = 40;
+  let tokenAmount = 11000;
   const slippage = 0.01; // 1% slippage
 
   let response = await raydiumBuy(
     baseMint,
     quoteMint,
-    solAmount,
+    tokenAmount,
     slippage,
-    true,
+    false,
     signer,
     connection,
     `${process.env.HELIUS_URL}`
